@@ -2,46 +2,34 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  // Llenar la tabla de estado_paciente
-  const estadosPaciente = [
-    { descripcion: 'Verde: Afección leve' },
-    { descripcion: 'Amarillo: Grave y estable' },
-    { descripcion: 'Rojo: Crítico recuperable' },
-    { descripcion: 'Negro: Fallecido / agónico' },
-  ];
+  console.log('Iniciando seed...');
 
-  for (const estado of estadosPaciente) {
-    await prisma.estadoPaciente.create({
-      data: estado,
-    });
-  }
+  // 1. Estados del Paciente
+  // Usamos createMany para insertar el array completo de una sola vez
 
-  // Llenar la tabla de tipo_lesion
-  const tiposLesion = [
-    { descripcion: 'Hemorragia' },
-    { descripcion: 'Contusión' },
-    { descripcion: 'Abrasión' },
-    { descripcion: 'Herida' },
-    { descripcion: 'Fractura' },
-    { descripcion: 'Quemadura' },
-    { descripcion: 'Alteración en la sensibilidad' },
-    { descripcion: 'Alteración en la movilidad' },
-    { descripcion: 'Dolor' },
-    { descripcion: 'Otro' },
-  ];
-
-  for (const tipo of tiposLesion) {
-    await prisma.tipoLesion.create({
-      data: tipo,
-    });
-  }
+  // 2. Tipos de Lesión
+  await prisma.tipoLesion.createMany({
+    data: [
+      { descripcion: 'Hemorragia' },
+      { descripcion: 'Contusión' },
+      { descripcion: 'Abrasión' },
+      { descripcion: 'Herida' },
+      { descripcion: 'Fractura' },
+      { descripcion: 'Quemadura' },
+      { descripcion: 'Alteración en la sensibilidad' },
+      { descripcion: 'Alteración en la movilidad' },
+      { descripcion: 'Dolor' },
+      { descripcion: 'Otro' },
+    ],
+    skipDuplicates: true,
+  });
 
   console.log('Datos de las tablas de catálogo insertados correctamente.');
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error('Error en el seed:', e);
     process.exit(1);
   })
   .finally(async () => {

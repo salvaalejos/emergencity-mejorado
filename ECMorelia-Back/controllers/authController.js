@@ -14,7 +14,7 @@ class AuthController {
         operador: async () => await this.userService.addUser(user, role, 'licencia_medica'),
         paramedicos: async () => await this.userService.addUser(user, role, 'licencia_medica'),
         doctor: async () => await this.userService.addUser(user, role, 'licencia_medica'),
-hospitales: async () => await this.userService.addUser(user, role, 'nombre')
+        hospitales: async () => await this.userService.addUser(user, role, 'nombre')
       }
 
       if (!signupByRole[role]) {
@@ -37,11 +37,16 @@ hospitales: async () => await this.userService.addUser(user, role, 'nombre')
       const { role } = req.params
       const user = req.body
 
+      console.log("-----------------------------------");
+      console.log("PETICIÓN RECIBIDA EN AUTH CONTROLLER");
+      console.log("Rol recibido:", role);
+      console.log("Cuerpo (user):", user);
+
       const loginByRole = {
         operador: async () => await this.userService.verifyUser(user, role, 'licencia_medica'),
         paramedicos: async () => await this.userService.verifyUser(user, role, 'licencia_medica'),
         doctor: async () => await this.userService.verifyUser(user, role, 'licencia_medica'),
-hospitales: async () => await this.userService.verifyHospital(user)
+        hospitales: async () => await this.userService.verifyHospital(user)
       }
 
       if (!loginByRole[role]) {

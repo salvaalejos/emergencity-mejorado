@@ -2,6 +2,8 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import {
   ChakraProvider,
   Box,
@@ -28,7 +30,16 @@ import {
   Progress,
   Input,
   Select,
-  Spinner
+  Spinner,
+  // --- AGREGADOS PARA EL REPORTE MÉDICO ---
+  SimpleGrid,
+  Divider,
+  Tag,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon
 } from "@chakra-ui/react";
 
 mapboxgl.accessToken = 'pk.eyJ1IjoiZWR1YXJkbzI1MGplbW0iLCJhIjoiY2xwYzVvdzc3MDNlYjJoazUzbzZsYjRwNiJ9.KsDXLdjWn2R4fMX-YIIU8g';
@@ -45,6 +56,7 @@ export default function MapaHospitalOptimizado() {
   const connectionAttempts = useRef(0);
   const maxConnectionAttempts = 5;
   const isMounted = useRef(true);
+  const reportRef = useRef(null);
 
   // Estado principal
   const [hospitalInfo, setHospitalInfo] = useState(null);
@@ -61,7 +73,16 @@ export default function MapaHospitalOptimizado() {
   
   const { isOpen: isNoteOpen, onOpen: onNoteOpen, onClose: onNoteClose } = useDisclosure();
   const { isOpen: isNotificationOpen, onOpen: onNotificationOpen, onClose: onNotificationClose } = useDisclosure();
-  
+
+  const { 
+    isOpen: isReportModalOpen, 
+    onOpen: onReportModalOpen, 
+    onClose: onReportModalClose 
+  } = useDisclosure();
+
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [doctorSeleccionado, setDoctorSeleccionado] = useState("");
+  const [listaDoctores, setListaDoctores] = useState([]); // <--- ESTO REEMPLAZA A LA CONSTANTE
   const [noteMessage, setNoteMessage] = useState("");
   const [patientInfo, setPatientInfo] = useState("");
 
@@ -138,6 +159,16 @@ export default function MapaHospitalOptimizado() {
               }
               break;
 
+              case 'recepcion_reporte_paciente':
+                console.log("📄 Reporte Médico Recibido:", data.reporte);
+                // Guardamos el reporte completo en el nuevo estado
+                setSelectedReport(data.reporte);
+                // Mostramos un Toast discreto
+                showToast('info', 'Nuevo Reporte Médico', `Ambulancia ${data.reporte.id_ambulancia} envió datos clínicos.`);
+                // ABRIMOS EL NUEVO MODAL
+                onReportModalOpen(); 
+              break;
+
             case 'navigation_cancelled':
               handleNavigationCancelled(data);
               break;
@@ -164,6 +195,35 @@ export default function MapaHospitalOptimizado() {
             case 'error':
               showToast('error', 'Error del Sistema', data.message);
               break;
+
+            case 'recepcion_reporte_paciente': {
+              console.log("NUEVO REPORTE RECIBIDO:", data.reporte);
+              
+              // Crear una notificación visual para el Dashboard usando datos del reporte cuando estén disponibles
+              const nuevaNotificacion = {
+                notificationId: `report_${Date.now()}`,
+                type: 'reporte_medico',
+                // Intentar obtener un ID de ambulancia desde el reporte, si no existe usar 'Externo'
+                ambulanceId: data.reporte?.ambulancia?.id || data.reporte?.origen?.ambulanciaId || 'Externo',
+                patientInfo: {
+                    age: data.reporte?.paciente?.edad || 'Desconocida',
+                    sex: data.reporte?.paciente?.sexo || 'No especificado',
+                    type: data.reporte?.paciente?.motivo_urgencia || 'No especificado',
+                    timestamp: new Date().toLocaleTimeString()
+                },
+                eta: data.reporte?.hora_estimada_llegada || 'Pendiente',
+                status: 'pending',
+                // Guardamos all el JSON original para depuración/consulta posterior
+                fullReport: data.reporte || null
+              };
+
+              setPatientNotifications(prev => [...prev, nuevaNotificacion]);
+              setSelectedNotification(nuevaNotificacion);
+              
+              showToast('error', '🚨 PACIENTE ENTRANDO', `Gravedad: ${data.reporte?.gravedad || 'Desconocida'}`);
+              onNotificationOpen(); // Abrimos el modal automáticamente
+              break;
+            }
 
             default:
               console.log('📨 Mensaje no manejado:', data.type);
@@ -224,6 +284,29 @@ export default function MapaHospitalOptimizado() {
     }
   }, [hospitalInfo]);
 
+  // ---------- CARGA DE DOCTORES DESDE LA BD ----------
+  useEffect(() => {
+    const cargarDoctores = async () => {
+      try {
+        // Asumimos que tu REST API corre en localhost:3000
+        const response = await fetch('http://localhost:3000/api/doctor'); 
+        
+        if (response.ok) {
+          const data = await response.json();
+          // La data debe ser un array: [{ id: 'doc_1', nombre: 'Dr. House', ... }, ...]
+          setListaDoctores(data); 
+        } else {
+          console.error("Error HTTP al cargar la lista de doctores:", response.status);
+          showToast('error', 'API Error', 'No se pudo cargar la lista de doctores.');
+        }
+      } catch (error) {
+        console.error("Error de conexión al API:", error);
+        showToast('error', 'Conexión Fallida', 'Verifique si el servidor de API (puerto 3000) está activo.');
+      }
+    };
+
+    cargarDoctores();
+  }, []);
   // ---------- HOSPITAL DATA LOADING MEJORADO ----------
   useEffect(() => {
     isMounted.current = true;
@@ -455,6 +538,35 @@ export default function MapaHospitalOptimizado() {
   };
 
   // ---------- MARKER MANAGEMENT ----------
+const asignarDoctor = () => {
+    // if (!doctorSeleccionado) {
+    //     showToast('warning', 'Falta Doctor', 'Por favor selecciona un doctor para asignar el paciente.');
+    //     return;
+    // }
+
+    // 1. Generar PDF (Ya lo tienes)
+    generarPDF();
+
+    // 2. Enviar por WebSocket al Doctor
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({
+            type: 'asignar_paciente_doctor', // Nuevo evento para el backend
+            targetDoctorId: doctorSeleccionado,
+            hospitalId: hospitalInfo.id,
+            reporte: selectedReport
+        }));
+        
+        console.log(`📤 Asignando paciente a doctor ${doctorSeleccionado}`);
+    }
+
+    // 3. Cerrar Modal
+    setTimeout(() => {
+        showToast('success', 'Asignado', `Paciente asignado al doctor y reporte descargado.`);
+        onReportModalClose();
+        setDoctorSeleccionado(""); // Resetear selección
+    }, 1500);
+  };
+
   const placeHospitalMarker = () => {
     if (!map.current || !hospitalInfo) return;
 
@@ -860,6 +972,63 @@ export default function MapaHospitalOptimizado() {
     showToast('info', 'Solicitando Actualización', 'Actualizando información de ruta...');
   };
 
+  const generarPDF = async () => {
+    const input = reportRef.current;
+    
+    if (!input) {
+      showToast('error', 'Error', 'No se encontró el contenido del reporte para imprimir.');
+      return;
+    }
+
+    try {
+      showToast('info', 'Generando PDF', 'Capturando contenido... por favor espera.');
+
+      // 1. Convertimos el DOM a Canvas (Alta resolución y configuración de fondo)
+      const canvas = await html2canvas(input, { 
+        scale: 2, // Mantiene la alta resolución para textos nítidos
+        useCORS: true, 
+        backgroundColor: '#ffffff', // Fuerza el fondo blanco para evitar transparencias
+        windowWidth: input.scrollWidth, // Captura el ancho total del scroll
+        windowHeight: input.scrollHeight // Captura la altura total del scroll (importante si el modal tiene scroll)
+      });
+
+      // 2. Obtenemos la imagen
+      const imgData = canvas.toDataURL('image/png');
+      
+      // 3. Configuramos el PDF (Portrait, milímetros, A4)
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      // 4. CÁLCULO DE DIMENSIONES ROBUSTO: 
+      //    Aseguramos que el ancho del canvas se ajuste al ancho del PDF (210mm)
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width; // Altura proporcional
+      
+      let heightLeft = imgHeight;
+      let position = 0; // Posición Y de inicio
+
+      // 5. AGREGAR LA IMAGEN AL PDF (manejo de páginas largas)
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+      heightLeft -= pdf.internal.pageSize.getHeight();
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
+        heightLeft -= pdf.internal.pageSize.getHeight();
+      }
+      
+      // 6. Descargar
+      const nombreArchivo = `Reporte_${selectedReport?.paciente?.nombre || 'Paciente'}_${Date.now()}.pdf`;
+      pdf.save(nombreArchivo);
+
+      showToast('success', 'PDF Descargado', 'El reporte se ha guardado correctamente.');
+
+    } catch (error) {
+      console.error("Error generando PDF:", error);
+      showToast('error', 'Error PDF', 'No se pudo generar el documento. Verifica los logs.');
+    }
+  };
+
   // ---------- UTILITY FUNCTIONS ----------
   const showToast = (status, title, description) => {
     toast({
@@ -1219,12 +1388,12 @@ export default function MapaHospitalOptimizado() {
         </ModalContent>
       </Modal>
 
-      {/* Notification Modal */}
+      {/* Notification Modal  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$*/ }
       <Modal isOpen={isNotificationOpen} onClose={onNotificationClose} size="lg">
         <ModalOverlay />
         <ModalContent>
           <ModalHeader bg="blue.600" color="white">
-            🚨 Notificación de Traslado de Paciente
+            Reporte del Paciente 🫢
           </ModalHeader>
           <ModalBody py={4}>
             {selectedNotification && (
@@ -1305,6 +1474,208 @@ export default function MapaHospitalOptimizado() {
             <Button colorScheme="green" onClick={() => acceptPatient(selectedNotification)}>
               ✅ Aceptar Paciente
             </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal> 
+      {/*  End notification Modal */}
+      {/* New Notification Modal (JSON)  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$*/}
+      {/* ================================================================= */}
+      {/* NUEVO MODAL DE REPORTE MÉDICO (CLÍNICO)               */}
+      {/* ================================================================= */}
+      <Modal isOpen={isReportModalOpen} onClose={onReportModalClose} size="xl" scrollBehavior="inside">
+
+        <ModalOverlay backdropFilter="blur(5px)" />
+        <ModalContent borderTop="5px solid #3182ce">
+          <ModalHeader display="flex" justifyContent="space-between" alignItems="center" bg="gray.50">
+            <HStack>
+              <Text>📋 Reporte Prehospitalario</Text>
+              {selectedReport?.codigo_prioridad_color && (
+                <Badge 
+                  bg={selectedReport.codigo_prioridad_color} 
+                  color="white" 
+                  px={3} py={1} borderRadius="full">
+                  TRIAGE
+                </Badge>
+              )}
+            </HStack>
+            <Badge fontSize="0.8em" colorScheme="blue">
+              🚑 {selectedReport?.id_ambulancia || 'S/N'}
+            </Badge>
+          </ModalHeader>
+          
+          <ModalBody py={4} bg="gray.50">
+            {/* CORRECCIÓN: El ref debe envolver AL CONTENIDO REAL */}
+            <div ref={reportRef} style={{ padding: '20px', background: 'white', minHeight: '100%' }}> 
+            
+              {selectedReport && (
+                <VStack spacing={5} align="stretch">
+                  
+                  {/* SECCIÓN 1: DATOS DEL PACIENTE */}
+                  <Card variant="outline" bg="white">
+                    <CardBody>
+                      <Text fontWeight="bold" mb={3} color="blue.600" borderBottom="1px solid #eee" pb={2}>
+                        👤 Identificación del Paciente
+                      </Text>
+                      <SimpleGrid columns={2} spacing={4}>
+                        <Box>
+                          <Text fontSize="xs" color="gray.500">Nombre</Text>
+                          <Text fontWeight="semibold" fontSize="lg">{selectedReport.paciente?.nombre || 'Desconocido'}</Text>
+                        </Box>
+                        <HStack>
+                          <Box>
+                            <Text fontSize="xs" color="gray.500">Edad</Text>
+                            <Text fontWeight="semibold">{selectedReport.paciente?.edad} años</Text>
+                          </Box>
+                          <Divider orientation="vertical" height="20px" />
+                          <Box>
+                            <Text fontSize="xs" color="gray.500">Sexo</Text>
+                            <Text fontWeight="semibold">{selectedReport.paciente?.sexo}</Text>
+                          </Box>
+                        </HStack>
+                      </SimpleGrid>
+                    </CardBody>
+                  </Card>
+
+                  {/* SECCIÓN 2: SIGNOS VITALES */}
+                  <Box>
+                     <Text fontWeight="bold" mb={2} color="red.500">❤️ Signos Vitales</Text>
+                     <SimpleGrid columns={[2, 4]} spacing={3}>
+                        <Box bg="white" p={2} borderRadius="md" boxShadow="sm" border="1px solid #eee" textAlign="center">
+                          <Text fontSize="xs" color="gray.500">F. Cardíaca</Text>
+                          <Text fontWeight="bold" fontSize="xl" color="red.600">
+                            {selectedReport.signos_vitales?.frecuencia_cardiaca || '--'}
+                          </Text>
+                          <Text fontSize="xs">bpm</Text>
+                        </Box>
+                        <Box bg="white" p={2} borderRadius="md" boxShadow="sm" border="1px solid #eee" textAlign="center">
+                          <Text fontSize="xs" color="gray.500">SpO2</Text>
+                          <Text fontWeight="bold" fontSize="xl" color="blue.600">
+                            {selectedReport.signos_vitales?.saturacion_oxigeno || '--'}
+                          </Text>
+                          <Text fontSize="xs">%</Text>
+                        </Box>
+                        <Box bg="white" p={2} borderRadius="md" boxShadow="sm" border="1px solid #eee" textAlign="center">
+                          <Text fontSize="xs" color="gray.500">Tensión Art.</Text>
+                          <Text fontWeight="bold" fontSize="lg" color="purple.600">
+                            {selectedReport.signos_vitales?.tension_arterial || '--'}
+                          </Text>
+                        </Box>
+                        <Box bg="white" p={2} borderRadius="md" boxShadow="sm" border="1px solid #eee" textAlign="center">
+                          <Text fontSize="xs" color="gray.500">Glucosa</Text>
+                          <Text fontWeight="bold" fontSize="lg" color="orange.500">
+                            {selectedReport.signos_vitales?.nivel_glucosa || '--'}
+                          </Text>
+                        </Box>
+                     </SimpleGrid>
+                  </Box>
+
+                  {/* SECCIÓN 3: DETALLES DEL EVENTO */}
+                  <Card variant="outline" bg="white">
+                    <CardBody>
+                      <Text fontWeight="bold" mb={3} color="blue.600" borderBottom="1px solid #eee" pb={2}>
+                        🚑 Evaluación de la Escena
+                      </Text>
+                      <VStack align="start" spacing={3}>
+                         <Box width="100%">
+                           <Text fontSize="xs" color="gray.500">Motivo de Urgencia</Text>
+                           <Text fontWeight="medium">{selectedReport.paciente?.motivo_urgencia}</Text>
+                         </Box>
+                         
+                         <SimpleGrid columns={2} spacing={4} width="100%">
+                            <Box>
+                              <Text fontSize="xs" color="gray.500">Tipo Accidente</Text>
+                              <Tag size="sm" colorScheme="orange">{selectedReport.paciente?.tipo_accidente || 'N/A'}</Tag>
+                            </Box>
+                            <Box>
+                               <Text fontSize="xs" color="gray.500">Ubicación</Text>
+                               <Text fontSize="sm">{selectedReport.ubicacion_actual || selectedReport.paciente?.lugar}</Text>
+                            </Box>
+                         </SimpleGrid>
+
+                         <Box width="100%">
+                           <Text fontSize="xs" color="gray.500">Descripción de Lesiones</Text>
+                           <Text fontSize="sm" bg="gray.50" p={2} borderRadius="md">
+                             {selectedReport.paciente?.descripcion_lesion || 'Sin descripción detallada'}
+                           </Text>
+                         </Box>
+                      </VStack>
+                    </CardBody>
+                  </Card>
+
+                  {/* SECCIÓN 4: INTERVENCIONES Y OBSERVACIONES */}
+                  <Accordion allowToggle defaultIndex={[0, 1]}> {/* defaultIndex ayuda a que salgan expandidos en el PDF */}
+                    <AccordionItem border="none" bg="white" borderRadius="md" mb={2}>
+                      <AccordionButton _expanded={{ bg: 'blue.50', color: 'blue.600' }}>
+                        <Box flex="1" textAlign="left" fontWeight="bold">
+                          💉 Intervenciones Realizadas ({selectedReport.intervenciones?.length || 0})
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                      <AccordionPanel pb={4}>
+                        {selectedReport.intervenciones?.length > 0 ? (
+                          <VStack align="start">
+                            {selectedReport.intervenciones.map((iv, idx) => (
+                              <Box key={idx} p={2} borderLeft="3px solid #3182ce" bg="gray.50" width="100%">
+                                <Text fontWeight="bold" fontSize="sm">{iv.tipo_intervencion}</Text>
+                                <Text fontSize="xs">{iv.descripcion} ({iv.hora_intervencion})</Text>
+                              </Box>
+                            ))}
+                          </VStack>
+                        ) : <Text fontSize="sm" color="gray.500">No se registraron intervenciones.</Text>}
+                      </AccordionPanel>
+                    </AccordionItem>
+
+                    <AccordionItem border="none" bg="white" borderRadius="md">
+                      <AccordionButton _expanded={{ bg: 'orange.50', color: 'orange.600' }}>
+                        <Box flex="1" textAlign="left" fontWeight="bold">
+                          📝 Observaciones y Hallazgos
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                      <AccordionPanel pb={4}>
+                        <Text fontSize="sm"><strong>Escena:</strong> {selectedReport.descripcion_escena || 'N/A'}</Text>
+                        <Divider my={2}/>
+                        <Text fontSize="sm"><strong>Otros hallazgos:</strong> {selectedReport.otros_hallazgos || 'N/A'}</Text>
+                        <Divider my={2}/>
+                        <Text fontSize="sm"><strong>Notas:</strong> {selectedReport.paciente?.observaciones || 'Sin observaciones'}</Text>
+                      </AccordionPanel>
+                    </AccordionItem>
+                  </Accordion>
+
+                </VStack>
+              )}
+            </div>
+          </ModalBody>
+          <ModalFooter bg="gray.100" flexDirection="column" gap={3}>
+            
+            {/* --- NUEVO SELECTOR DE DOCTORES --- */}
+            {/* <Box width="100%">
+                <Text fontSize="xs" fontWeight="bold" color="gray.500" mb={1}>ASIGNAR A MÉDICO DE GUARDIA:</Text>
+                <Select 
+                // ...
+                value={doctorSeleccionado}
+                onChange={(e) => setDoctorSeleccionado(e.target.value)}
+                >
+                <option value="">-- Seleccionar Doctor --</option>
+                {listaDoctores.map((doc) => (
+                <option key={doc.id} value={doc.id}>
+                {doc.nombre} {doc.especialidad ? ` (${doc.especialidad})` : ''}
+                </option>
+                ))}
+                </Select>
+            </Box> */}
+            {/* ---------------------------------- */}
+
+            <HStack width="100%" justifyContent="flex-end">
+                <Button variant="ghost" mr={3} onClick={onReportModalClose}>
+                  Cerrar
+                </Button>
+                
+                {/* El botón ahora llama a nuestra nueva función wrapper */}
+                <Button colorScheme="blue" onClick={asignarDoctor}>
+                  ✅ Confirmar y Descargar PDF
+                </Button>
+            </HStack>
           </ModalFooter>
         </ModalContent>
       </Modal>

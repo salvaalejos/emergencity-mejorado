@@ -1,6 +1,6 @@
 // websocket-server-optimized.js
 const WebSocket = require('ws');
-const http = require('http');
+const http = require('node:http');
 const express = require('express');
 const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
 
@@ -377,6 +377,10 @@ async function handleMessage(ws, data) {
     case 'hospital_accept_patient':
       handleHospitalAcceptPatient(data);
       break;
+
+    case 'asignar_paciente_doctor':
+      handleAsignarDoctor(ws, data);
+      break;
       
     case 'hospital_reject_patient':
       handleHospitalRejectPatient(data);
@@ -384,6 +388,10 @@ async function handleMessage(ws, data) {
       
     case 'cancel_navigation':
       handleCancelNavigation(data);
+      break;
+
+      case 'nuevo_reporte_paciente':
+      handleNuevoReportePaciente(ws, data);
       break;
       
     case 'request_route_update':
@@ -454,8 +462,7 @@ async function handleRegisterHospital(ws, data) {
 
   let hospitalData = {
     info: {
-      id: data.hospital.id,
-      nombre: data.hospital.nombre || `Hospital ${data.hospital.id}`,
+      id: data.hospital.nombre || `Hospital ${data.hospital.id}`,
       direccion: data.hospital.direccion || '',
       lat: data.hospital.lat,
       lng: data.hospital.lng,
@@ -662,11 +669,11 @@ function handleCancelNavigation(data) {
   activeRoutes.delete(ambulanceId);
   
   // Eliminar notificaciones pendientes
-  pendingNotifications.forEach((notif, id) => {
+  for (const [id, notif] of pendingNotifications.entries()) {
     if (notif.ambulanceId === ambulanceId && notif.hospitalId === hospitalId) {
       pendingNotifications.delete(id);
     }
-  });
+  }
   
   // Notificar a ambos lados
   if (ambulance && ambulance.ws) {
@@ -762,7 +769,103 @@ function sendMessage(ws, message) {
 function sendError(ws, message) {
   sendMessage(ws, { type: 'error', message });
 }
+function handleAsignarDoctor(ws, data) {
+  const { targetDoctorId, reporte, hospitalId } = data;
+  
+  console.log(`[SERVER] 👨‍⚕️ Hospital ${hospitalId} asigna paciente a Doctor ID: ${targetDoctorId}`);
 
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        type: 'asignar_paciente_doctor', // El evento que espera React
+        targetDoctorId: String(targetDoctorId), // Forzamos String para evitar problemas de tipos
+        hospitalId: hospitalId,
+        reporte: reporte
+      }));
+    }
+  });
+
+  // AQUÍ ENVIARÍAS AL DOCTOR SI ESTUVIERA CONECTADO
+  // Por ahora, simularemos que el doctor recibe la notificación reenviándola
+  // a todos los clientes (o al mismo hospital para confirmar) para que veas que funciona.
+  
+  /* NOTA: Para que esto funcione 100% real, necesitarías una vista "VistaDoctor.jsx"
+     que se conecte con: ws.send({ type: 'register_doctor', doctorId: 'doc_1' })
+     y el servidor la guarde en activeDoctors.
+  */
+
+  // Confirmamos al hospital que la asignación se procesó
+  sendMessage(ws, {
+    type: 'doctor_asignado_ok',
+    message: `Asignación enviada a la red.`
+  });
+  
+  // (Opcional) Si quieres ver el log del reporte viajando:
+  console.log("📄 Datos del reporte transferidos internamente.");
+}
+
+//&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+// ---------- NUEVA FUNCIÓN PARA REPORTE DIRECTO ----------
+function handleNuevoReportePaciente(ws, data) {
+  try {
+    const { targetHospitalId, reporte } = data;
+
+    console.log(`[SERVER] 📥 Buscando hospital con ID: "${targetHospitalId}"`);
+    
+    // DEBUG: Ver qué hospitales están realmente conectados
+    console.log('[SERVER] 🏥 IDs disponibles en memoria:', Array.from(activeHospitals.keys()));
+
+    // 1. VALIDACIÓN: Si no viene ID, cancelamos
+    if (!targetHospitalId) {
+      console.error('[SERVER] ❌ Error: targetHospitalId es nulo o indefinido');
+      sendError(ws, 'No se especificó un ID de hospital destino.');
+      return;
+    }
+
+    // 2. BÚSQUEDA SEGURA (Intentamos como String y como Number por si acaso)
+    let hospitalDestino = activeHospitals.get(targetHospitalId); // Intento directo
+    
+    if (!hospitalDestino) {
+        // Si falló, intentamos forzando string (lo más común)
+        hospitalDestino = activeHospitals.get(String(targetHospitalId));
+    }
+    
+    if (!hospitalDestino) {
+        // Si falló, intentamos forzando número
+        hospitalDestino = activeHospitals.get(Number(targetHospitalId));
+    }
+
+    // 3. VERIFICACIÓN CRÍTICA (Aquí es donde fallaba antes)
+    if (!hospitalDestino) {
+      console.log(`[SERVER] ❌ Hospital ID ${targetHospitalId} NO ENCONTRADO en la lista de activos.`);
+      sendError(ws, `El hospital seleccionado (ID: ${targetHospitalId}) no está conectado.`);
+      return; // <--- IMPORTANTE: DETENER LA EJECUCIÓN AQUÍ
+    }
+
+    // 4. ENVÍO SEGURO
+    if (hospitalDestino.ws && hospitalDestino.ws.readyState === WebSocket.OPEN) {
+      console.log(`[SERVER] 📤 Enviando reporte a: ${hospitalDestino.info.nombre}`);
+      
+      hospitalDestino.ws.send(JSON.stringify({
+        type: 'recepcion_reporte_paciente',
+        reporte: reporte
+      }));
+      
+      sendMessage(ws, { 
+        type: 'reporte_enviado_ok', 
+        message: `Notificación enviada a ${hospitalDestino.info.nombre}` 
+      });
+
+    } else {
+      console.log(`[SERVER] ⚠️ El hospital existe pero el socket está cerrado.`);
+      activeHospitals.delete(targetHospitalId); // Limpiamos si está muerto
+    }
+
+  } catch (error) {
+    console.error('[SERVER] 💥 Error fatal en handleNuevoReportePaciente:', error);
+  }
+}
+//&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 function cleanupDisconnectedClient(ws) {
   // Limpiar hospitales
   for (let [hospitalId, hospitalData] of activeHospitals.entries()) {
@@ -788,13 +891,15 @@ function cleanupDisconnectedClient(ws) {
 
 // Heartbeat mejorado
 setInterval(() => {
-  wss.clients.forEach((ws) => {
+  for (const ws of wss.clients) {
     if (ws.readyState === WebSocket.OPEN) {
       try {
         ws.ping();
-      } catch (e) {}
+      } catch (e) {
+        console.error('Error enviando ping:', e.message);
+      }
     }
-  });
+  }
 }, 30000);
 
 // Iniciar servidor

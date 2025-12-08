@@ -40,9 +40,34 @@ wss.on('connection', (ws, req) => {
   ws.on('message', (message) => {
     try {
       const data = JSON.parse(message);
+
+      if (data.type === 'identify') {
+        // data.userId debería ser algo único, ej: "hospital_12", "doctor_5"
+        connectedUsers.set(data.userId, ws); 
+        console.log(`Usuario identificado con su ID único: ${data.userId}`);
+      }
+
+      if (data.type === 'send_patient_form') {
+        const targetSocket = connectedUsers.get(data.targetId); // Buscamos al hospital por su ID
+
+        if (targetSocket && targetSocket.readyState === WebSocket.OPEN) {
+            targetSocket.send(JSON.stringify({
+                type: 'incoming_patient_form',
+                from: data.senderId, // ID del paramédico
+                patientData: data.formData // El JSON del paciente
+            }));
+            console.log(`Formulario enviado de ${data.senderId} a ${data.targetId}`);
+        } else {
+            console.log(`El usuario destino ${data.targetId} no está conectado.`);
+            // Aquí podrías enviar un mensaje de error de vuelta al remitente
+        }
+    }
+
+
+
       handleAmbulanceMessage(ws, data);
     } catch (error) {
-      console.error('❌ Error procesando mensaje WebSocket:', error);
+      console.error('Error procesando mensaje WebSocket:', error);
       
       // También maneja mensajes de texto plano (para compatibilidad con Python)
       if (typeof message === 'string') {
@@ -222,16 +247,37 @@ app.use(cookieParser())
 app.use(cors(corsOptions))
 
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs))
-app.use('/seed', seed)
-app.use('/auth', auth)
-app.use('/ambulancias', ambulancia)
-app.use('/paramedico', paramedico)
-app.use('/hospital', hospital)
-app.use('/operador', operador)
-app.use('/doctor', doctor)
-app.use('/reporte-prehospitalario', reportePrehospitalario);
+app.use('/api/seed', seed)
+app.use('/api/auth', auth)  // <--- Ahora sí funcionará /api/auth/login/hospitales
+app.use('/api/ambulancias', ambulancia)
+app.use('/api/paramedico', paramedico)
+app.use('/api/hospital', hospital)
+app.use('/api/operador', operador)
+app.use('/api/doctor', doctor)
+app.use('/api/reporte-prehospitalario', reportePrehospitalario);
 
 // ==================== RUTAS WEBSOCKET PARA AMBULANCIAS ====================
+app.get('/api/doctores', async (req, res) => {
+    try {
+        // --- REEMPLAZA ESTO CON TU QUERY REAL DE PRISMA O TU ORM ---
+        // Asumimos que tienes una tabla 'Doctor'
+        const doctores = await prisma.doctor.findMany({
+            select: { 
+                id: true, 
+                nombre: true, 
+                especialidad: true 
+            }
+        });
+        
+        // Devolvemos la lista
+        res.json(doctores);
+
+    } catch (error) {
+        console.error("Error al obtener doctores:", error);
+        res.status(500).json({ error: 'No se pudo obtener la lista de doctores de la base de datos.' });
+    }
+});
+
 app.get('/api/ambulances/active', (req, res) => {
   const ambulancesList = Array.from(activeAmbulances.entries()).map(([id, ambulance]) => ({
     id: ambulance.id,
@@ -263,8 +309,7 @@ app.get('/api/ambulances/health', (req, res) => {
 app.post('/api/pacientes', async (req, res) => {
   try {
     const { seccion, datos } = req.body;
-
-    console.log('📨 Datos recibidos desde Python:', { seccion, datos });
+    console.log('Datos recibidos desde Python:', { seccion, datos });
 
     // Envía los datos a través de WebSockets a todos los clientes conectados
     wss.clients.forEach((client) => {

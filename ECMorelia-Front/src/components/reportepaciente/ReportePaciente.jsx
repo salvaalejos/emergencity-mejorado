@@ -14,6 +14,12 @@ import { useNavigate, Outlet } from "react-router-dom";
 const ReportePaciente = () => {
 
   const [theme, setTheme] = useState('light'); // 'light' | 'dark'
+
+  // ESTADO NUEVO: Lista de hospitales traída de la BD
+  const [listaHospitales, setListaHospitales] = useState([]);
+  
+  // ESTADO NUEVO: El ID del hospital seleccionado para el envío
+  const [hospitalSeleccionado, setHospitalSeleccionado] = useState('');
   
   const [seccionActiva, setSeccionActiva] = useState('');
   const [reporte, setReporte] = useState({
@@ -83,15 +89,35 @@ const ReportePaciente = () => {
   });
 
   useEffect(() => {
+    const cargarHospitales = async () => {
+      try {
+        // Asumiendo que crearás este endpoint en tu backend (GET /api/hospital)
+        const response = await fetch('http://localhost:3000/api/hospital');
+        if (response.ok) {
+          const data = await response.json();
+          // Asumimos que data es un array: [{ id: 1, nombre: 'Hospital Civil' }, ...]
+          setListaHospitales(data); 
+        } else {
+          console.error("Error al cargar la lista de hospitales");
+        }
+      } catch (error) {
+        console.error("Error de conexión:", error);
+      }
+    };
+    cargarHospitales();
+  }, []);
+
+
+  useEffect(() => {
     // Apply body background according to theme
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8081');
+    const ws = new WebSocket('ws://localhost:3002/ws');
 
     ws.onopen = () => {
-      console.log('Conectado al servidor de WebSockets');
+      console.log('✅ ReportePaciente conectado al servidor de WebSockets');
     };
 
     ws.onmessage = async (event) => {
@@ -101,9 +127,7 @@ const ReportePaciente = () => {
       } else {
         data = event.data;
       }
-
       console.log('Mensaje recibido del servidor:', data);
-
       try {
         const parsedData = JSON.parse(data);
         if (parsedData.tipo === 'navegacion') {
@@ -125,6 +149,9 @@ const ReportePaciente = () => {
             });
           });
         }
+        if (parsedData.type === 'active_hospitals_update') {
+        setListaHospitales(parsedData.hospitals);
+      }
       } catch (error) {
         console.error('Error al parsear el mensaje:', error);
         setMensajeError('Error al procesar los datos recibidos.');
@@ -265,6 +292,11 @@ const ReportePaciente = () => {
     // ==========================================================
     // PASO 1: VALIDAR ANTES DE HACER NADA
     // ==========================================================
+    if (!hospitalSeleccionado) {
+      alert("Por favor, selecciona un hospital destino.");
+      return;
+    }
+
     const esValido = validarFormulario();
 
     // Si el formulario NO es válido, 'validarFormulario' ya actualizó
@@ -284,14 +316,14 @@ const ReportePaciente = () => {
     const reporteParaEnviar = { ...reporte };
     // ... (tu lógica de triajeColor y combinarFechaYHora)
     if (triajeColor) {
-       reporteParaEnviar.codigo_prioridad_color = triajeColor;
-     }
+       reporteParaEnviar.codigo_prioridad_color = triajeColor;
+    }
     if (reporte.hora_estimada_llegada) {
-       reporteParaEnviar.hora_estimada_llegada = combinarFechaYHora(reporte.hora_estimada_llegada);
-     }
+      reporteParaEnviar.hora_estimada_llegada = combinarFechaYHora(reporte.hora_estimada_llegada);
+    }
     reporteParaEnviar.intervenciones = reporte.intervenciones.map((intervencion) => {
-       // ... (tu lógica de intervenciones)
-     });
+      // ... (tu lógica de intervenciones)
+    });
 
     // ==========================================================
     // PASO 2: ABRIR EL JSON EN UNA NUEVA PESTAÑA
@@ -310,9 +342,15 @@ const ReportePaciente = () => {
     // PASO 3: TU LÓGICA DE ENVÍO (FETCH) PUEDE CONTINUAR
     // ==========================================================
     try {
-      console.log('Reporte a enviar:', jsonString);
+      //console.log('Reporte a enviar:', jsonString); no
+      const reporteParaEnviar = { ...reporte };
+      const payloadFinal = {
+      seccion: "reporte_prehospitalario", // Le damos un nombre a la sección
+      datos: reporteParaEnviar            // Aquí metemos all el reporte
+      };
+      const jsonString = JSON.stringify(payloadFinal); // Stringify del NUEVO objeto
 
-      const response = await fetch('http://localhost:3000//reporte-prehospitalario/', {
+      const response = await fetch('http://localhost:3000/api/pacientes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: jsonString,
@@ -329,6 +367,24 @@ const ReportePaciente = () => {
     } catch (error) {
       console.error('Error en la solicitud:', error);
       alert('Error en la solicitud');
+    }
+
+    // =========================================================
+    // ENVÍO POR WEBSOCKET (DIRECTO AL HOSPITAL SELECCIONADO)
+    // =========================================================
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      const payloadSocket = {
+        type: 'nuevo_reporte_paciente',     // El tipo que configuramos en el backend
+        targetHospitalId: hospitalSeleccionado, // <--- EL ID CLAVE PARA NO HACER BROADCAST TOTAL
+        reporte: reporteParaEnviar
+      };
+      
+      console.log("Enviando socket:", payloadSocket);
+      socket.send(JSON.stringify(payloadSocket));
+      
+      alert(`✅ Datos enviados al hospital seleccionado en tiempo real via WebSocket.`);
+    } else {
+      alert("❌ Error: No hay conexión con el servidor de sockets.");
     }
   };
 
@@ -566,6 +622,33 @@ const ReportePaciente = () => {
           {/* 1. Identificación del Servicio */}
           <fieldset ref={seccionRefs.identificacion_servicio} className={obtenerClaseSeccion('identificacion_servicio')}>
             <legend>1. Identificación del Servicio</legend>
+            {/* --- NUEVO BLOQUE DE SELECCIÓN DE HOSPITAL --- */}
+  <div style={{ marginBottom: 16, padding: 10, background: 'rgba(0,0,0,0.03)', borderRadius: 8, border: '1px solid var(--accent)' }}>
+    <label style={{ fontWeight: 'bold', color: 'var(--accent)' }}>🏥 Hospital Destino (Requerido)</label>
+    <select
+      value={hospitalSeleccionado}
+      onChange={(e) => setHospitalSeleccionado(e.target.value)}
+      required
+      style={{
+        width: '100%',
+        padding: '12px',
+        borderRadius: '6px',
+        marginTop: '8px',
+        border: '1px solid rgba(0,0,0,0.1)',
+        fontSize: '1rem',
+        fontWeight: 'bold',
+        color: 'black',
+      }}
+    >
+      <option value="">-- Selecciona el hospital --</option>
+      {listaHospitales.map((hospital) => (
+        <option key={hospital.id} value={hospital.id}>
+          {hospital.nombre} {hospital.camasDisponibles ? `(Camas: ${hospital.camasDisponibles})` : ''}
+        </option>
+      ))}
+    </select>
+  </div>
+  {/* --------------------------------------------- */}
             <div className="grid-2">
               <div>
                 <label>Número de ambulancia:</label>

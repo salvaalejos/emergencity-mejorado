@@ -44,6 +44,11 @@ async verifyUser(user, rol, id) {
             throw new Error('User not found')
         }
 
+        console.log("-------------------------------------------------");
+        console.log("DEPURACIÓN:");
+        console.log("Contraseña que llega del Frontend:", `"${user.password}"`);
+        console.log("Contraseña guardada en la BD:", `"${currentUser.password}"`);
+
         const isPasswordValid = await this.bcryptService.comparePassword(
             user.password,
             currentUser.password

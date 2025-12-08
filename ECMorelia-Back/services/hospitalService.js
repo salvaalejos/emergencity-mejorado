@@ -1,8 +1,7 @@
 const prisma = require('../config/prisma')
 
 class HospitalService {
-  constructor() {}
-
+  
   async addRecord(data) {
     try {
       const recordExists = await prisma.hospitales.findFirst({
