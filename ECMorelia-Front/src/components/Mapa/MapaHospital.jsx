@@ -34,7 +34,7 @@ import {
   useColorMode,
   useColorModeValue,
   IconButton,
-  extendTheme, 
+  extendTheme,
   // Y agrega estos componentes al destructuring de @chakra-ui/react:
 SimpleGrid,
 Divider,
@@ -95,10 +95,10 @@ export default function MapaHospitalOptimizado() {
   const [patientNotifications, setPatientNotifications] = useState([]);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [selectedAmbulance, setSelectedAmbulance] = useState(null);
-  
+
   const { isOpen: isNoteOpen, onOpen: onNoteOpen, onClose: onNoteClose } = useDisclosure();
   const { isOpen: isNotificationOpen, onOpen: onNotificationOpen, onClose: onNotificationClose } = useDisclosure();
-  
+
   const [noteMessage, setNoteMessage] = useState("");
   const [patientInfo, setPatientInfo] = useState("");
 
@@ -142,27 +142,27 @@ const reportRef = useRef(null);
       setIsConnecting(true);
       connectionAttempts.current += 1;
 
-      ws.current = new WebSocket('ws://localhost:3002/ws');
+      ws.current = new WebSocket('wss://emergencity.ddnsking.com/socket');
 
       ws.current.onopen = () => {
         if (!isMounted.current) return;
-        
+
         console.log('✅ Hospital conectado al servidor WebSocket');
         setWsConnected(true);
         setIsConnecting(false);
         connectionAttempts.current = 0;
-        
+
         // Registrar hospital cuando la info esté disponible
         if (hospitalInfo) {
           registerHospital();
         }
-        
+
         showToast('success', 'Sistema Conectado', 'Hospital conectado al servidor central');
       };
 
       ws.current.onmessage = (event) => {
         if (!isMounted.current) return;
-        
+
         try {
           const data = JSON.parse(event.data);
           console.log('📨 Mensaje recibido en hospital:', data.type);
@@ -206,7 +206,7 @@ const reportRef = useRef(null);
 
             case 'patient_accepted':
               if (data.hospitalId === hospitalInfo?.id) {
-                setPatientNotifications(prev => 
+                setPatientNotifications(prev =>
                   prev.filter(n => n.notificationId !== data.notificationId)
                 );
                 showToast('success', 'Paciente Aceptado', 'Traslado confirmado - Preparar recepción');
@@ -222,7 +222,7 @@ const reportRef = useRef(null);
 
             case 'patient_rejected':
               if (data.hospitalId === hospitalInfo?.id) {
-                setPatientNotifications(prev => 
+                setPatientNotifications(prev =>
                   prev.filter(n => n.notificationId !== data.notificationId)
                 );
                 clearRoute();
@@ -248,7 +248,7 @@ const reportRef = useRef(null);
 
       ws.current.onclose = (event) => {
         if (!isMounted.current) return;
-        
+
         console.log('🔌 WebSocket cerrado:', event.code, event.reason);
         setWsConnected(false);
         setIsConnecting(false);
@@ -265,7 +265,7 @@ const reportRef = useRef(null);
 
       ws.current.onerror = (error) => {
         if (!isMounted.current) return;
-        
+
         console.error('❌ Error WebSocket:', error);
         setWsConnected(false);
         setIsConnecting(false);
@@ -314,7 +314,7 @@ const reportRef = useRef(null);
 const asignarDoctor = () => {
   // 1. Generar PDF
   generarPDF();
-  
+
   // 2. Enviar por WebSocket al Doctor
   if (ws.current && ws.current.readyState === WebSocket.OPEN) {
     ws.current.send(JSON.stringify({
@@ -325,7 +325,7 @@ const asignarDoctor = () => {
     }));
     console.log(`📤 Asignando paciente a doctor ${doctorSeleccionado}`);
   }
-  
+
   // 3. Cerrar Modal
   setTimeout(() => {
     showToast('success', 'Asignado', `Paciente asignado al doctor y reporte descargado.`);
@@ -341,7 +341,7 @@ const asignarDoctor = () => {
     const loadHospitalData = async () => {
       try {
         const stored = JSON.parse(localStorage.getItem("hospitalInfo") || "null");
-        
+
         if (!stored || !stored.id) {
           showToast('error', 'Configuración Requerida', 'Complete la información del hospital en el sistema');
           return;
@@ -361,7 +361,7 @@ const asignarDoctor = () => {
 
         if (hospitalData.direccion && (!hospitalData.lat || !hospitalData.lng)) {
           showToast('info', 'Verificando Ubicación', 'Validando coordenadas del hospital...');
-          
+
           const verifiedCoords = await geocodeHospitalAddress(hospitalData.direccion);
           hospitalData.lat = verifiedCoords.lat;
           hospitalData.lng = verifiedCoords.lng;
@@ -397,7 +397,7 @@ useEffect(() => {
   const cargarDoctores = async () => {
     try {
       const response = await fetch('http://localhost:3000/api/doctor');
-      
+
       if (response.ok) {
         const data = await response.json();
         setListaDoctores(data);
@@ -410,7 +410,7 @@ useEffect(() => {
       showToast('error', 'Conexión Fallida', 'Verifique si el servidor de API (puerto 3000) está activo.');
     }
   };
-  
+
   cargarDoctores();
 }, []);
 
@@ -447,7 +447,7 @@ useEffect(() => {
   useEffect(() => {
     if (!hospitalInfo || !mapContainer.current) return;
 
-    const mapStyle = colorMode === 'light' 
+    const mapStyle = colorMode === 'light'
       ? 'mapbox://styles/mapbox/light-v11'
       : 'mapbox://styles/mapbox/dark-v11';
 
@@ -464,9 +464,9 @@ useEffect(() => {
     mapInstance.on('load', () => {
       console.log('🗺️ Mapa del hospital cargado');
       map.current = mapInstance;
-      
+
       placeHospitalMarker();
-      
+
       if (trafficEnabled) {
         addTrafficLayer();
       }
@@ -477,8 +477,8 @@ useEffect(() => {
 
     return () => {
       cleanupMarkers();
-      try { 
-        if (mapInstance) mapInstance.remove(); 
+      try {
+        if (mapInstance) mapInstance.remove();
       } catch (e) {}
     };
   }, [hospitalInfo, colorMode]);
@@ -600,8 +600,8 @@ useEffect(() => {
       el.innerHTML = `
         <div style="
           width: 70px; height: 70px; background: linear-gradient(135deg, #2E7D32, #1B5E20);
-          border: 4px solid white; border-radius: 50%; display: flex; align-items: center; 
-          justify-content: center; color: white; font-weight: bold; font-size: 28px; 
+          border: 4px solid white; border-radius: 50%; display: flex; align-items: center;
+          justify-content: center; color: white; font-weight: bold; font-size: 28px;
           box-shadow: 0 8px 25px rgba(46,125,50,0.3); cursor: pointer;
         ">🏥</div>
       `;
@@ -649,8 +649,8 @@ useEffect(() => {
       el.innerHTML = `
         <div style="
           width: 55px; height: 55px; background: linear-gradient(135deg, #D32F2F, #B71C1C);
-          border: 3px solid white; border-radius: 50%; display: flex; align-items: center; 
-          justify-content: center; color: white; font-weight: bold; font-size: 22px; 
+          border: 3px solid white; border-radius: 50%; display: flex; align-items: center;
+          justify-content: center; color: white; font-weight: bold; font-size: 22px;
           box-shadow: 0 4px 15px rgba(211,47,47,0.3); cursor: pointer;
         ">🚑</div>
       `;
@@ -692,7 +692,7 @@ useEffect(() => {
       if (ambulance) {
         setSelectedAmbulance(ambulance);
         showToast('info', 'Ambulancia Seleccionada', ambulance.id);
-        
+
         if (ambulance.location) {
           map.current.flyTo({
             center: [ambulance.location.lng, ambulance.location.lat],
@@ -710,9 +710,9 @@ useEffect(() => {
     const marker = ambulanceMarkers.current[data.ambulanceId];
     if (marker) {
       marker.setLngLat([data.location.lng, data.location.lat]);
-      
-      setAmbulances(prev => prev.map(amb => 
-        amb.id === data.ambulanceId 
+
+      setAmbulances(prev => prev.map(amb =>
+        amb.id === data.ambulanceId
           ? { ...amb, location: data.location, speed: data.speed, heading: data.heading }
           : amb
       ));
@@ -724,7 +724,7 @@ useEffect(() => {
       hospitalMarker.current.remove();
       hospitalMarker.current = null;
     }
-    
+
     Object.values(ambulanceMarkers.current).forEach(marker => {
       try { marker.remove(); } catch (e) {}
     });
@@ -820,7 +820,7 @@ useEffect(() => {
   // ---------- NOTIFICATION HANDLING MEJORADO ----------
   const handlePatientTransferNotification = (data) => {
     console.log('🚨 Notificación de traslado recibida:', data);
-    
+
     const notification = {
       ...data,
       id: data.notificationId || `notif_${Date.now()}`,
@@ -838,15 +838,15 @@ useEffect(() => {
     // NO dibujar ruta aquí - solo cuando el hospital acepte
     // La ruta se trazará cuando el hospital acepte al paciente
 
-    showToast('info', 'Nuevo Paciente en Camino', 
+    showToast('info', 'Nuevo Paciente en Camino',
       `Ambulancia ${data.ambulanceId} - ETA: ${data.eta || '?'} min`);
-    
+
     onNotificationOpen();
   };
 
   const handleNavigationCancelled = (data) => {
     clearRoute();
-    setPatientNotifications(prev => 
+    setPatientNotifications(prev =>
       prev.filter(n => n.ambulanceId !== data.ambulanceId)
     );
     showToast('info', 'Navegación Cancelada', 'Ambulancia canceló el traslado');
@@ -865,10 +865,10 @@ useEffect(() => {
       hospitalInfo: hospitalInfo
     }));
 
-    setPatientNotifications(prev => 
+    setPatientNotifications(prev =>
       prev.filter(n => n.notificationId !== notification.notificationId)
     );
-    
+
     showToast('success', 'Paciente Aceptado', 'Preparar área de recepción');
     onNotificationClose();
   };
@@ -886,10 +886,10 @@ useEffect(() => {
       reason: 'Capacidad limitada - No hay camas disponibles'
     }));
 
-    setPatientNotifications(prev => 
+    setPatientNotifications(prev =>
       prev.filter(n => n.notificationId !== notification.notificationId)
     );
-    
+
     showToast('warning', 'Paciente Rechazado', 'Se ha notificado a la ambulancia');
     onNotificationClose();
   };
@@ -926,15 +926,15 @@ useEffect(() => {
 
   const generarPDF = async () => {
   const input = reportRef.current;
-  
+
   if (!input) {
     showToast('error', 'Error', 'No se encontró el contenido del reporte para imprimir.');
     return;
   }
-  
+
   try {
     showToast('info', 'Generando PDF', 'Capturando contenido... por favor espera.');
-    
+
     const canvas = await html2canvas(input, {
       scale: 2,
       useCORS: true,
@@ -942,30 +942,30 @@ useEffect(() => {
       windowWidth: input.scrollWidth,
       windowHeight: input.scrollHeight
     });
-    
+
     const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF('p', 'mm', 'a4');
     const pdfWidth = pdf.internal.pageSize.getWidth();
     const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-    
+
     let heightLeft = imgHeight;
     let position = 0;
-    
+
     pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
     heightLeft -= pdf.internal.pageSize.getHeight();
-    
+
     while (heightLeft >= 0) {
       position = heightLeft - imgHeight;
       pdf.addPage();
       pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
       heightLeft -= pdf.internal.pageSize.getHeight();
     }
-    
+
     const nombreArchivo = `Reporte_${selectedReport?.paciente?.nombre || 'Paciente'}_${Date.now()}.pdf`;
     pdf.save(nombreArchivo);
-    
+
     showToast('success', 'PDF Descargado', 'El reporte se ha guardado correctamente.');
-    
+
   } catch (error) {
     console.error("Error generando PDF:", error);
     showToast('error', 'Error PDF', 'No se pudo generar el documento.');
@@ -1000,7 +1000,7 @@ useEffect(() => {
 
   const centerOnHospital = () => {
     if (!map.current || !hospitalInfo) return;
-    
+
     map.current.flyTo({
       center: [hospitalInfo.lng, hospitalInfo.lat],
       zoom: 16,
@@ -1072,7 +1072,7 @@ useEffect(() => {
               <Button size="sm" colorScheme={wsConnected ? "green" : isConnecting ? "yellow" : "orange"} onClick={reconnect} isDisabled={isConnecting}>
                 {isConnecting ? <Spinner size="sm" /> : wsConnected ? "✅ CONECTADO" : "🔌 RECONECTAR"}
               </Button>
-              
+
               <ColorModeToggle />
             </HStack>
           </HStack>
@@ -1113,7 +1113,7 @@ useEffect(() => {
                 ) : (
                   <VStack spacing={3} align="stretch">
                     {ambulances.map(ambulance => (
-                      <Card 
+                      <Card
                         key={ambulance.id}
                         bg={selectedAmbulance?.id === ambulance.id ? "blue.50" : cardBg}
                         border="1px"
@@ -1130,7 +1130,7 @@ useEffect(() => {
                               {ambulance.status === 'en_ruta' ? 'EN RUTA' : 'DISPONIBLE'}
                             </Badge>
                           </HStack>
-                          
+
                           <VStack align="start" spacing={1}>
                             <Text fontSize="sm">📋 {ambulance.placa || 'N/A'}</Text>
                             <Text fontSize="sm">🔧 {ambulance.tipo || 'N/A'}</Text>
@@ -1149,8 +1149,8 @@ useEffect(() => {
                           )}
 
                           <HStack mt={3} spacing={2}>
-                            <Button 
-                              size="xs" 
+                            <Button
+                              size="xs"
                               colorScheme="blue"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1165,8 +1165,8 @@ useEffect(() => {
                             >
                               👁️ Seguir
                             </Button>
-                            <Button 
-                              size="xs" 
+                            <Button
+                              size="xs"
                               colorScheme="purple"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1194,10 +1194,10 @@ useEffect(() => {
                       <Text fontSize="sm"><strong>Tiempo estimado:</strong> {activeRoute.formattedDuration}</Text>
                     </VStack>
                     <Progress value={70} size="sm" colorScheme="purple" mt={3} borderRadius="full" />
-                    <Button 
-                      size="sm" 
-                      colorScheme="blue" 
-                      width="100%" 
+                    <Button
+                      size="sm"
+                      colorScheme="blue"
+                      width="100%"
                       mt={3}
                       onClick={() => {
                         if (activeRoute.geometry) {
@@ -1220,16 +1220,16 @@ useEffect(() => {
 
               {/* Quick Actions */}
               <VStack spacing={2}>
-                <Button 
-                  width="100%" 
-                  colorScheme="blue" 
+                <Button
+                  width="100%"
+                  colorScheme="blue"
                   onClick={centerOnHospital}
                   leftIcon={<Text>🎯</Text>}
                 >
                   Centrar en Hospital
                 </Button>
-                <Button 
-                  width="100%" 
+                <Button
+                  width="100%"
                   colorScheme={trafficEnabled ? "orange" : "blue"}
                   onClick={toggleTraffic}
                   leftIcon={<Text>🚦</Text>}
@@ -1268,9 +1268,9 @@ useEffect(() => {
                   <Text fontSize="sm"><strong>🏥 Destino:</strong> {hospitalInfo.nombre}</Text>
                 </VStack>
                 <Progress value={65} size="sm" colorScheme="blue" mt={2} borderRadius="full" />
-                <Button 
-                  size="xs" 
-                  colorScheme="blue" 
+                <Button
+                  size="xs"
+                  colorScheme="blue"
                   mt={2}
                   onClick={() => {
                     if (activeRoute.geometry) {
@@ -1306,7 +1306,7 @@ useEffect(() => {
                 Para: {selectedAmbulance?.id} - {selectedAmbulance?.placa}
               </Text>
 
-              <Textarea 
+              <Textarea
                 placeholder="Escribe tu mensaje para el conductor de la ambulancia..."
                 value={noteMessage}
                 onChange={(e) => setNoteMessage(e.target.value)}
@@ -1327,8 +1327,8 @@ useEffect(() => {
             <Button variant="ghost" mr={3} onClick={onNoteClose}>
               Cancelar
             </Button>
-            <Button 
-              colorScheme="blue" 
+            <Button
+              colorScheme="blue"
               onClick={sendNoteToAmbulance}
               isDisabled={!noteMessage.trim()}
             >
