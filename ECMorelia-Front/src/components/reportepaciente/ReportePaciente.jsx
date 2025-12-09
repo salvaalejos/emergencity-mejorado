@@ -17,10 +17,10 @@ const ReportePaciente = () => {
 
   // ESTADO NUEVO: Lista de hospitales traída de la BD
   const [listaHospitales, setListaHospitales] = useState([]);
-  
+
   // ESTADO NUEVO: El ID del hospital seleccionado para el envío
   const [hospitalSeleccionado, setHospitalSeleccionado] = useState('');
-  
+
   const [seccionActiva, setSeccionActiva] = useState('');
   const [reporte, setReporte] = useState({
     paciente: {
@@ -96,7 +96,7 @@ const ReportePaciente = () => {
         if (response.ok) {
           const data = await response.json();
           // Asumimos que data es un array: [{ id: 1, nombre: 'Hospital Civil' }, ...]
-          setListaHospitales(data); 
+          setListaHospitales(data);
         } else {
           console.error("Error al cargar la lista de hospitales");
         }
@@ -114,7 +114,7 @@ const ReportePaciente = () => {
   }, [theme]);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:3002/ws');
+    const ws = new WebSocket('ws://localhost:8081/ws');
 
     ws.onopen = () => {
       console.log('✅ ReportePaciente conectado al servidor de WebSockets');
@@ -188,7 +188,7 @@ const ReportePaciente = () => {
 
   const validarFormulario = () => {
   const nuevosErrores = {};
-  
+
   // --- 1. Identificación del Servicio ---
   if (!reporte.id_ambulancia.trim()) nuevosErrores.id_ambulancia = "Campo requerido";
   if (!reporte.hora_estimada_llegada.trim()) nuevosErrores.hora_estimada_llegada = "Campo requerido";
@@ -198,7 +198,7 @@ const ReportePaciente = () => {
   // Para objetos anidados, creamos el sub-objeto si no existe
   if (!reporte.paciente.nombre.trim() || !reporte.paciente.edad || !reporte.paciente.sexo) {
     if (!nuevosErrores.paciente) nuevosErrores.paciente = {};
-    
+
     if (!reporte.paciente.nombre.trim()) nuevosErrores.paciente.nombre = "Campo requerido";
     if (!reporte.paciente.edad) nuevosErrores.paciente.edad = "Campo requerido";
     if (!reporte.paciente.sexo) nuevosErrores.paciente.sexo = "Campo requerido";
@@ -211,13 +211,13 @@ const ReportePaciente = () => {
     nuevosErrores.signos_vitales.frecuencia_cardiaca = "Campo requerido";
   }
   // ... (añade el resto de 'signos_vitales')
-  
+
   // ... (AÑADE EL RESTO DE TUS CAMPOS REQUERIDOS AQUÍ) ...
 
-  
+
   // Actualizamos el estado de errores
   setErrors(nuevosErrores);
-  
+
   // El formulario es válido si el objeto de errores está vacío
   return Object.keys(nuevosErrores).length === 0;
 };
@@ -286,107 +286,110 @@ const ReportePaciente = () => {
     return fechaLocal.toISOString();
   };
 
-  const handleSubmit = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
+	const handleSubmit = async (e) => {
+		if (e && e.preventDefault) e.preventDefault();
 
-    // ==========================================================
-    // PASO 1: VALIDAR ANTES DE HACER NADA
-    // ==========================================================
-    if (!hospitalSeleccionado) {
-      alert("Por favor, selecciona un hospital destino.");
-      return;
-    }
+		// ------------------------------------------------------------
+		// 1. VALIDACIÓN (Conservamos la seguridad de tu compañero)
+		// ------------------------------------------------------------
+		const esValido = validarFormulario();
+		if (!esValido) {
+			console.log("Formulario inválido. Errores:", errors);
+			return; // Si faltan datos, no enviamos nada
+		}
+		setErrors({});
 
-    const esValido = validarFormulario();
+		// ------------------------------------------------------------
+		// 2. LÓGICA DE VIDEOLLAMADA (INYECCIÓN TUYA) 💉
+		// ------------------------------------------------------------
 
-    // Si el formulario NO es válido, 'validarFormulario' ya actualizó
-    // el estado 'errors' y se mostrarán los mensajes.
-    // Detenemos el envío aquí.
-    if (!esValido) {
-      console.log("Formulario inválido. Errores:", errors);
-      return;
-    }
+		// A. Generar ID Numérico (Timestamp) para la sala
+		const callId = Date.now().toString();
 
-    // --- Si llegamos aquí, el formulario ES VÁLIDO ---
-    
-    // Limpiamos errores antiguos (por si acaso)
-    setErrors({});
+		// B. Enviar Alerta por WebSocket (Avisa a Hospital y Médico)
+		if (socket && socket.readyState === WebSocket.OPEN) {
+			const notificacionSocket = {
+				type: 'patient_transfer_notification',
+				callId: callId,
+				ambulanceId: reporte.id_ambulancia || 'AMB-TEMP',
 
-    // Prepara tu objeto 'reporteParaEnviar' (ya lo tenías)
-    const reporteParaEnviar = { ...reporte };
-    // ... (tu lógica de triajeColor y combinarFechaYHora)
-    if (triajeColor) {
-       reporteParaEnviar.codigo_prioridad_color = triajeColor;
-    }
-    if (reporte.hora_estimada_llegada) {
-      reporteParaEnviar.hora_estimada_llegada = combinarFechaYHora(reporte.hora_estimada_llegada);
-    }
-    reporteParaEnviar.intervenciones = reporte.intervenciones.map((intervencion) => {
-      // ... (tu lógica de intervenciones)
-    });
+				// Datos resumen para la alerta visual del Médico
+				patientInfo: {
+					age: reporte.paciente.edad,
+					sex: reporte.paciente.sexo,
+					condition: triagePresets[variable] ? triagePresets[variable].label : 'No especificado'
+				},
+				eta: reporte.hora_estimada_llegada
+			};
 
-    // ==========================================================
-    // PASO 2: ABRIR EL JSON EN UNA NUEVA PESTAÑA
-    // ==========================================================
-    const jsonString = JSON.stringify(reporteParaEnviar, null, 2);
-    
-    const newTab = window.open();
-    // Usamos <pre> para que el JSON mantenga el formato
-    newTab.document.write('<html><head><title>Reporte JSON</title></head><body><pre>');
-    // Usamos textContent para evitar problemas de XSS
-    newTab.document.body.firstChild.textContent = jsonString;
-    newTab.document.write('</pre></body></html>');
-    newTab.document.close();
-    
-    // ==========================================================
-    // PASO 3: TU LÓGICA DE ENVÍO (FETCH) PUEDE CONTINUAR
-    // ==========================================================
-    try {
-      //console.log('Reporte a enviar:', jsonString); no
-      const reporteParaEnviar = { ...reporte };
-      const payloadFinal = {
-      seccion: "reporte_prehospitalario", // Le damos un nombre a la sección
-      datos: reporteParaEnviar            // Aquí metemos all el reporte
-      };
-      const jsonString = JSON.stringify(payloadFinal); // Stringify del NUEVO objeto
+			socket.send(JSON.stringify(notificacionSocket));
+			console.log("🚨 Alerta enviada por Socket. Sala:", callId);
+		} else {
+			console.warn("⚠️ Socket desconectado. No se envió alerta en tiempo real.");
+		}
 
-      const response = await fetch('http://localhost:3000/api/pacientes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: jsonString,
-      });
+		// C. Abrir la videollamada automáticamente (Nueva Pestaña)
+		// Esto garantiza que el paramédico entre a la sala al instante
+		window.open(`/videocall?room=${callId}`, '_blank');
 
-      if (response.ok) {
-        console.log('Reporte enviado exitosamente');
-        alert('Reporte enviado exitosamente');
-        // ... (tu lógica de resetear el formulario)
-      } else {
-        console.error('Error al enviar el reporte');
-        //alert('Error al enviar el reporte');
-      }
-    } catch (error) {
-      console.error('Error en la solicitud:', error);
-      alert('Error en la solicitud');
-    }
+		// ------------------------------------------------------------
+		// 3. GUARDADO EN BASE DE DATOS (INTEGRACIÓN) 💾
+		// ------------------------------------------------------------
 
-    // =========================================================
-    // ENVÍO POR WEBSOCKET (DIRECTO AL HOSPITAL SELECCIONADO)
-    // =========================================================
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      const payloadSocket = {
-        type: 'nuevo_reporte_paciente',     // El tipo que configuramos en el backend
-        targetHospitalId: hospitalSeleccionado, // <--- EL ID CLAVE PARA NO HACER BROADCAST TOTAL
-        reporte: reporteParaEnviar
-      };
-      
-      console.log("Enviando socket:", payloadSocket);
-      socket.send(JSON.stringify(payloadSocket));
-      
-      alert(`✅ Datos enviados al hospital seleccionado en tiempo real via WebSocket.`);
-    } else {
-      alert("❌ Error: No hay conexión con el servidor de sockets.");
-    }
-  };
+		// 1. Hacemos una copia profunda para NO modificar el estado original
+		// (Esto evita que se acumulen los IDs [VideoID] [VideoID]...)
+		const reporteParaEnviar = JSON.parse(JSON.stringify(reporte));
+
+		// 2. Ahora sí, inyectamos el ID en la copia
+		const notaVideo = ` [VideoID: ${callId}]`;
+
+		// Aseguramos que observaciones sea un string
+		const obsActual = reporteParaEnviar.paciente.observaciones || '';
+		reporteParaEnviar.paciente.observaciones = obsActual + notaVideo;
+
+		if (reporteParaEnviar.paciente.observaciones) {
+			reporteParaEnviar.paciente.observaciones += notaVideo;
+		} else {
+			reporteParaEnviar.paciente.observaciones = notaVideo;
+		}
+
+		// Formato de hora (si tu compañero usa una función auxiliar)
+		if (reporte.hora_estimada_llegada && typeof combinarFechaYHora === 'function') {
+			reporteParaEnviar.hora_estimada_llegada = combinarFechaYHora(reporte.hora_estimada_llegada);
+		} else {
+			// Fallback por si acaso: asegurar formato ISO
+			// reporteParaEnviar.hora_estimada_llegada = new Date().toISOString();
+		}
+
+		// ❌ IMPORTANTE: No enviamos campos extra que Prisma no conozca
+		// delete reporteParaEnviar.callId; // (Si lo hubieras agregado al objeto antes)
+		// delete reporteParaEnviar.codigo_prioridad_color; // (Si lo tuvieras)
+
+		try {
+			console.log('Enviando a BD:', reporteParaEnviar);
+
+			// Usamos la variable de entorno o localhost por defecto
+			const API_URL = import.meta.env.VITE_API || 'http://localhost:3000';
+
+			const response = await fetch(`${API_URL}/reporte-prehospitalario/`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(reporteParaEnviar),
+			});
+
+			if (response.ok) {
+				console.log('✅ Reporte guardado exitosamente');
+				// Opcional: alert('Reporte enviado correctamente');
+			} else {
+				const errorText = await response.text();
+				console.error('❌ Error al guardar en BD:', errorText);
+				// No mostramos alerta de error al usuario para no asustarlo,
+				// ya que la videollamada (lo urgente) SÍ se abrió.
+			}
+		} catch (error) {
+			console.error('Error de conexión HTTP:', error);
+		}
+	};
 
   // Small helpers for triage presets
   const triagePresets = [
@@ -504,7 +507,7 @@ const ReportePaciente = () => {
           cursor:pointer;
           font-size:1rem;
         }
-          
+
         .boton_triage.light{color:white;}
         .boton_triage.dark{background:#e94b4b;color:white;}
 
@@ -561,9 +564,9 @@ const ReportePaciente = () => {
               <div className="triage">
               <div style={{textAlign:'right', marginRight:8}}>
                 <div style={{fontSize:12}}>
-                  <button 
+                  <button
                   onClick={aumentarVariable}
-                  className={`boton_triage ${theme === 'dark' ? 'dark' : 'light'}`} 
+                  className={`boton_triage ${theme === 'dark' ? 'dark' : 'light'}`}
                   style={{background: triagePresets[variable].value, marginRight:20, borderRadius:50, width: 100, height: 100}}
                   >Triage
                   </button>
@@ -574,7 +577,7 @@ const ReportePaciente = () => {
                 {/* Cambia el color del círculo de triaje según la selección */}
                 {triagePresets[variable].label}
               </p>
-              
+
               <div>
                 {/* <select
                   className='seleccion_de_triage'

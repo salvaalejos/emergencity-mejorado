@@ -70,14 +70,14 @@ export default function MapaHospitalOptimizado() {
   const [patientNotifications, setPatientNotifications] = useState([]);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [selectedAmbulance, setSelectedAmbulance] = useState(null);
-  
+
   const { isOpen: isNoteOpen, onOpen: onNoteOpen, onClose: onNoteClose } = useDisclosure();
   const { isOpen: isNotificationOpen, onOpen: onNotificationOpen, onClose: onNotificationClose } = useDisclosure();
 
-  const { 
-    isOpen: isReportModalOpen, 
-    onOpen: onReportModalOpen, 
-    onClose: onReportModalClose 
+  const {
+    isOpen: isReportModalOpen,
+    onOpen: onReportModalOpen,
+    onClose: onReportModalClose
   } = useDisclosure();
 
   const [selectedReport, setSelectedReport] = useState(null);
@@ -103,27 +103,27 @@ export default function MapaHospitalOptimizado() {
       setIsConnecting(true);
       connectionAttempts.current += 1;
 
-      ws.current = new WebSocket('ws://localhost:3002/ws');
+      ws.current = new WebSocket('ws://localhost:8081/ws');
 
       ws.current.onopen = () => {
         if (!isMounted.current) return;
-        
+
         console.log('✅ Hospital conectado al servidor WebSocket');
         setWsConnected(true);
         setIsConnecting(false);
         connectionAttempts.current = 0;
-        
+
         // Registrar hospital cuando la info esté disponible
         if (hospitalInfo) {
           registerHospital();
         }
-        
+
         showToast('success', 'Sistema Conectado', 'Hospital conectado al servidor central');
       };
 
       ws.current.onmessage = (event) => {
         if (!isMounted.current) return;
-        
+
         try {
           const data = JSON.parse(event.data);
           console.log('📨 Mensaje recibido en hospital:', data.type);
@@ -166,7 +166,7 @@ export default function MapaHospitalOptimizado() {
                 // Mostramos un Toast discreto
                 showToast('info', 'Nuevo Reporte Médico', `Ambulancia ${data.reporte.id_ambulancia} envió datos clínicos.`);
                 // ABRIMOS EL NUEVO MODAL
-                onReportModalOpen(); 
+                onReportModalOpen();
               break;
 
             case 'navigation_cancelled':
@@ -175,7 +175,7 @@ export default function MapaHospitalOptimizado() {
 
             case 'patient_accepted':
               if (data.hospitalId === hospitalInfo?.id) {
-                setPatientNotifications(prev => 
+                setPatientNotifications(prev =>
                   prev.filter(n => n.notificationId !== data.notificationId)
                 );
                 showToast('success', 'Paciente Aceptado', 'Traslado confirmado - Preparar recepción');
@@ -184,7 +184,7 @@ export default function MapaHospitalOptimizado() {
 
             case 'patient_rejected':
               if (data.hospitalId === hospitalInfo?.id) {
-                setPatientNotifications(prev => 
+                setPatientNotifications(prev =>
                   prev.filter(n => n.notificationId !== data.notificationId)
                 );
                 clearRoute();
@@ -198,7 +198,7 @@ export default function MapaHospitalOptimizado() {
 
             case 'recepcion_reporte_paciente': {
               console.log("NUEVO REPORTE RECIBIDO:", data.reporte);
-              
+
               // Crear una notificación visual para el Dashboard usando datos del reporte cuando estén disponibles
               const nuevaNotificacion = {
                 notificationId: `report_${Date.now()}`,
@@ -219,7 +219,7 @@ export default function MapaHospitalOptimizado() {
 
               setPatientNotifications(prev => [...prev, nuevaNotificacion]);
               setSelectedNotification(nuevaNotificacion);
-              
+
               showToast('error', '🚨 PACIENTE ENTRANDO', `Gravedad: ${data.reporte?.gravedad || 'Desconocida'}`);
               onNotificationOpen(); // Abrimos el modal automáticamente
               break;
@@ -235,7 +235,7 @@ export default function MapaHospitalOptimizado() {
 
       ws.current.onclose = (event) => {
         if (!isMounted.current) return;
-        
+
         console.log('🔌 WebSocket cerrado:', event.code, event.reason);
         setWsConnected(false);
         setIsConnecting(false);
@@ -252,7 +252,7 @@ export default function MapaHospitalOptimizado() {
 
       ws.current.onerror = (error) => {
         if (!isMounted.current) return;
-        
+
         console.error('❌ Error WebSocket:', error);
         setWsConnected(false);
         setIsConnecting(false);
@@ -289,12 +289,12 @@ export default function MapaHospitalOptimizado() {
     const cargarDoctores = async () => {
       try {
         // Asumimos que tu REST API corre en localhost:3000
-        const response = await fetch('http://localhost:3000/api/doctor'); 
-        
+        const response = await fetch('http://localhost:3000/api/doctor');
+
         if (response.ok) {
           const data = await response.json();
           // La data debe ser un array: [{ id: 'doc_1', nombre: 'Dr. House', ... }, ...]
-          setListaDoctores(data); 
+          setListaDoctores(data);
         } else {
           console.error("Error HTTP al cargar la lista de doctores:", response.status);
           showToast('error', 'API Error', 'No se pudo cargar la lista de doctores.');
@@ -314,7 +314,7 @@ export default function MapaHospitalOptimizado() {
     const loadHospitalData = async () => {
       try {
         const stored = JSON.parse(localStorage.getItem("hospitalInfo") || "null");
-        
+
         if (!stored || !stored.id) {
           showToast('error', 'Configuración Requerida', 'Complete la información del hospital en el sistema');
           return;
@@ -334,7 +334,7 @@ export default function MapaHospitalOptimizado() {
         // Solo forzar geocoding si no tenemos coordenadas válidas
         if (hospitalData.direccion && (!hospitalData.lat || !hospitalData.lng)) {
           showToast('info', 'Verificando Ubicación', 'Validando coordenadas del hospital...');
-          
+
           const verifiedCoords = await geocodeHospitalAddress(hospitalData.direccion);
           hospitalData.lat = verifiedCoords.lat;
           hospitalData.lng = verifiedCoords.lng;
@@ -372,7 +372,7 @@ export default function MapaHospitalOptimizado() {
     }
 
     try {
-      const response = await fetch('http://localhost:3002/geocode', {
+      const response = await fetch('http://localhost:3000/geocode', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -411,10 +411,10 @@ export default function MapaHospitalOptimizado() {
     mapInstance.on('load', () => {
       console.log('🗺️ Mapa del hospital cargado');
       map.current = mapInstance;
-      
+
       // Colocar marcador del hospital
       placeHospitalMarker();
-      
+
       // Agregar capas
       if (trafficEnabled) {
         addTrafficLayer();
@@ -426,8 +426,8 @@ export default function MapaHospitalOptimizado() {
 
     return () => {
       cleanupMarkers();
-      try { 
-        if (mapInstance) mapInstance.remove(); 
+      try {
+        if (mapInstance) mapInstance.remove();
       } catch (e) {}
     };
   }, [hospitalInfo]);
@@ -555,7 +555,7 @@ const asignarDoctor = () => {
             hospitalId: hospitalInfo.id,
             reporte: selectedReport
         }));
-        
+
         console.log(`📤 Asignando paciente a doctor ${doctorSeleccionado}`);
     }
 
@@ -579,8 +579,8 @@ const asignarDoctor = () => {
       el.innerHTML = `
         <div style="
           width: 70px; height: 70px; background: linear-gradient(135deg, #2E7D32, #1B5E20);
-          border: 4px solid white; border-radius: 50%; display: flex; align-items: center; 
-          justify-content: center; color: white; font-weight: bold; font-size: 28px; 
+          border: 4px solid white; border-radius: 50%; display: flex; align-items: center;
+          justify-content: center; color: white; font-weight: bold; font-size: 28px;
           box-shadow: 0 8px 25px rgba(46,125,50,0.3); cursor: pointer;
         ">🏥</div>
       `;
@@ -625,8 +625,8 @@ const asignarDoctor = () => {
       el.innerHTML = `
         <div style="
           width: 55px; height: 55px; background: linear-gradient(135deg, #D32F2F, #B71C1C);
-          border: 3px solid white; border-radius: 50%; display: flex; align-items: center; 
-          justify-content: center; color: white; font-weight: bold; font-size: 22px; 
+          border: 3px solid white; border-radius: 50%; display: flex; align-items: center;
+          justify-content: center; color: white; font-weight: bold; font-size: 22px;
           box-shadow: 0 4px 15px rgba(211,47,47,0.3); cursor: pointer;
         ">🚑</div>
       `;
@@ -669,7 +669,7 @@ const asignarDoctor = () => {
       if (ambulance) {
         setSelectedAmbulance(ambulance);
         showToast('info', 'Ambulancia Seleccionada', ambulance.id);
-        
+
         // Centrar en la ambulancia
         if (ambulance.location) {
           map.current.flyTo({
@@ -689,10 +689,10 @@ const asignarDoctor = () => {
     if (marker) {
       // Actualizar posición del marcador
       marker.setLngLat([data.location.lng, data.location.lat]);
-      
+
       // Actualizar estado local
-      setAmbulances(prev => prev.map(amb => 
-        amb.id === data.ambulanceId 
+      setAmbulances(prev => prev.map(amb =>
+        amb.id === data.ambulanceId
           ? { ...amb, location: data.location, speed: data.speed, heading: data.heading }
           : amb
       ));
@@ -704,7 +704,7 @@ const asignarDoctor = () => {
       hospitalMarker.current.remove();
       hospitalMarker.current = null;
     }
-    
+
     Object.values(ambulanceMarkers.current).forEach(marker => {
       try { marker.remove(); } catch (e) {}
     });
@@ -826,7 +826,7 @@ const asignarDoctor = () => {
       }
 
       const routeData = await response.json();
-      
+
       drawRouteOnMap(routeData.geometry);
       setActiveRoute({
         ambulanceId: ambulance.id,
@@ -835,7 +835,7 @@ const asignarDoctor = () => {
         duration: routeData.duration
       });
 
-      showToast('success', 'Ruta Calculada', 
+      showToast('success', 'Ruta Calculada',
         `${(routeData.distance / 1000).toFixed(1)} km, ${Math.round(routeData.duration / 60)} min`);
 
     } catch (error) {
@@ -847,7 +847,7 @@ const asignarDoctor = () => {
   // ---------- NOTIFICATION HANDLING MEJORADO ----------
   const handlePatientTransferNotification = (data) => {
     console.log('🚨 Notificación de traslado recibida:', data);
-    
+
     const notification = {
       ...data,
       id: data.notificationId || `notif_${Date.now()}`,
@@ -869,21 +869,25 @@ const asignarDoctor = () => {
       });
     }
 
-    showToast('info', 'Nuevo Paciente en Camino', 
+    showToast('info', 'Nuevo Paciente en Camino',
       `Ambulancia ${data.ambulanceId} - ETA: ${data.eta || '?'} min`);
-    
+
     onNotificationOpen();
   };
 
   const handleNavigationCancelled = (data) => {
     clearRoute();
-    setPatientNotifications(prev => 
+    setPatientNotifications(prev =>
       prev.filter(n => n.ambulanceId !== data.ambulanceId)
     );
     showToast('info', 'Navegación Cancelada', 'Ambulancia canceló el traslado');
   };
 
   const acceptPatient = (notification) => {
+		// 1. 💉 INYECCIÓN: Abrir video automáticamente al aceptar
+		if (notification.callId) {
+			window.open(`/videocall?room=${notification.callId}`, '_blank');
+		}
     if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
       showToast('error', 'Error de Conexión', 'No hay conexión con el servidor');
       return;
@@ -897,10 +901,10 @@ const asignarDoctor = () => {
       hospitalInfo: hospitalInfo
     }));
 
-    setPatientNotifications(prev => 
+    setPatientNotifications(prev =>
       prev.filter(n => n.notificationId !== notification.notificationId)
     );
-    
+
     showToast('success', 'Paciente Aceptado', 'Preparar área de recepción');
     onNotificationClose();
   };
@@ -919,10 +923,10 @@ const asignarDoctor = () => {
       reason: 'Capacidad limitada - No hay camas disponibles'
     }));
 
-    setPatientNotifications(prev => 
+    setPatientNotifications(prev =>
       prev.filter(n => n.notificationId !== notification.notificationId)
     );
-    
+
     clearRoute();
     showToast('warning', 'Paciente Rechazado', 'Se ha notificado a la ambulancia');
     onNotificationClose();
@@ -974,7 +978,7 @@ const asignarDoctor = () => {
 
   const generarPDF = async () => {
     const input = reportRef.current;
-    
+
     if (!input) {
       showToast('error', 'Error', 'No se encontró el contenido del reporte para imprimir.');
       return;
@@ -984,9 +988,9 @@ const asignarDoctor = () => {
       showToast('info', 'Generando PDF', 'Capturando contenido... por favor espera.');
 
       // 1. Convertimos el DOM a Canvas (Alta resolución y configuración de fondo)
-      const canvas = await html2canvas(input, { 
+      const canvas = await html2canvas(input, {
         scale: 2, // Mantiene la alta resolución para textos nítidos
-        useCORS: true, 
+        useCORS: true,
         backgroundColor: '#ffffff', // Fuerza el fondo blanco para evitar transparencias
         windowWidth: input.scrollWidth, // Captura el ancho total del scroll
         windowHeight: input.scrollHeight // Captura la altura total del scroll (importante si el modal tiene scroll)
@@ -994,15 +998,15 @@ const asignarDoctor = () => {
 
       // 2. Obtenemos la imagen
       const imgData = canvas.toDataURL('image/png');
-      
+
       // 3. Configuramos el PDF (Portrait, milímetros, A4)
       const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      // 4. CÁLCULO DE DIMENSIONES ROBUSTO: 
+
+      // 4. CÁLCULO DE DIMENSIONES ROBUSTO:
       //    Aseguramos que el ancho del canvas se ajuste al ancho del PDF (210mm)
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const imgHeight = (canvas.height * pdfWidth) / canvas.width; // Altura proporcional
-      
+
       let heightLeft = imgHeight;
       let position = 0; // Posición Y de inicio
 
@@ -1016,7 +1020,7 @@ const asignarDoctor = () => {
         pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, imgHeight);
         heightLeft -= pdf.internal.pageSize.getHeight();
       }
-      
+
       // 6. Descargar
       const nombreArchivo = `Reporte_${selectedReport?.paciente?.nombre || 'Paciente'}_${Date.now()}.pdf`;
       pdf.save(nombreArchivo);
@@ -1043,7 +1047,7 @@ const asignarDoctor = () => {
 
   const centerOnHospital = () => {
     if (!map.current || !hospitalInfo) return;
-    
+
     map.current.flyTo({
       center: [hospitalInfo.lng, hospitalInfo.lat],
       zoom: 16,
@@ -1153,7 +1157,7 @@ const asignarDoctor = () => {
                 ) : (
                   <VStack spacing={3} align="stretch">
                     {ambulances.map(ambulance => (
-                      <Card 
+                      <Card
                         key={ambulance.id}
                         bg={selectedAmbulance?.id === ambulance.id ? "blue.50" : "white"}
                         border="1px"
@@ -1170,7 +1174,7 @@ const asignarDoctor = () => {
                               {ambulance.status === 'en_ruta' ? 'EN RUTA' : 'DISPONIBLE'}
                             </Badge>
                           </HStack>
-                          
+
                           <VStack align="start" spacing={1}>
                             <Text fontSize="sm">📋 {ambulance.placa || 'N/A'}</Text>
                             <Text fontSize="sm">🔧 {ambulance.tipo || 'N/A'}</Text>
@@ -1189,8 +1193,8 @@ const asignarDoctor = () => {
                           )}
 
                           <HStack mt={3} spacing={2}>
-                            <Button 
-                              size="xs" 
+                            <Button
+                              size="xs"
                               colorScheme="blue"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1205,8 +1209,8 @@ const asignarDoctor = () => {
                             >
                               👁️ Seguir
                             </Button>
-                            <Button 
-                              size="xs" 
+                            <Button
+                              size="xs"
                               colorScheme="teal"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1215,8 +1219,8 @@ const asignarDoctor = () => {
                             >
                               🛣️ Trazar Ruta
                             </Button>
-                            <Button 
-                              size="xs" 
+                            <Button
+                              size="xs"
                               colorScheme="purple"
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -1244,10 +1248,10 @@ const asignarDoctor = () => {
                       <Text fontSize="sm"><strong>Tiempo estimado:</strong> {Math.round(activeRoute.duration / 60)} min</Text>
                     </VStack>
                     <Progress value={70} size="sm" colorScheme="purple" mt={3} borderRadius="full" />
-                    <Button 
-                      size="sm" 
-                      colorScheme="blue" 
-                      width="100%" 
+                    <Button
+                      size="sm"
+                      colorScheme="blue"
+                      width="100%"
                       mt={3}
                       onClick={() => {
                         if (activeRoute.geometry) {
@@ -1270,16 +1274,16 @@ const asignarDoctor = () => {
 
               {/* Quick Actions */}
               <VStack spacing={2}>
-                <Button 
-                  width="100%" 
-                  colorScheme="blue" 
+                <Button
+                  width="100%"
+                  colorScheme="blue"
                   onClick={centerOnHospital}
                   leftIcon={<Text>🎯</Text>}
                 >
                   Centrar en Hospital
                 </Button>
-                <Button 
-                  width="100%" 
+                <Button
+                  width="100%"
                   colorScheme={trafficEnabled ? "orange" : "blue"}
                   onClick={toggleTraffic}
                   leftIcon={<Text>🚦</Text>}
@@ -1318,9 +1322,9 @@ const asignarDoctor = () => {
                   <Text fontSize="sm"><strong>🏥 Destino:</strong> {hospitalInfo.nombre}</Text>
                 </VStack>
                 <Progress value={65} size="sm" colorScheme="blue" mt={2} borderRadius="full" />
-                <Button 
-                  size="xs" 
-                  colorScheme="blue" 
+                <Button
+                  size="xs"
+                  colorScheme="blue"
                   mt={2}
                   onClick={() => {
                     if (activeRoute.geometry) {
@@ -1356,7 +1360,7 @@ const asignarDoctor = () => {
                 Para: {selectedAmbulance?.id} - {selectedAmbulance?.placa}
               </Text>
 
-              <Textarea 
+              <Textarea
                 placeholder="Escribe tu mensaje para el conductor de la ambulancia..."
                 value={noteMessage}
                 onChange={(e) => setNoteMessage(e.target.value)}
@@ -1377,8 +1381,8 @@ const asignarDoctor = () => {
             <Button variant="ghost" mr={3} onClick={onNoteClose}>
               Cancelar
             </Button>
-            <Button 
-              colorScheme="blue" 
+            <Button
+              colorScheme="blue"
               onClick={sendNoteToAmbulance}
               isDisabled={!noteMessage.trim()}
             >
@@ -1395,78 +1399,102 @@ const asignarDoctor = () => {
           <ModalHeader bg="blue.600" color="white">
             Reporte del Paciente 🫢
           </ModalHeader>
-          <ModalBody py={4}>
-            {selectedNotification && (
-              <VStack spacing={4} align="stretch">
-                <Alert status="info" borderRadius="md">
-                  <AlertIcon />
-                  <Box>
-                    <AlertTitle>Ambulancia en Camino!</AlertTitle>
-                    <AlertDescription>
-                      {selectedNotification.ambulanceId} - {selectedNotification.ambulanceInfo?.placa || 'N/A'}
-                    </AlertDescription>
-                  </Box>
-                </Alert>
+					<ModalBody py={4}>
+						{selectedNotification && (
+							<VStack spacing={4} align="stretch">
 
-                <HStack spacing={4} align="start">
-                  <Box flex={1}>
-                    <Text fontWeight="bold" mb={2}>Información del Paciente:</Text>
-                    <VStack align="start" spacing={1}>
-                      <Text fontSize="sm"><strong>Edad:</strong> {selectedNotification.patientInfo?.age || 'No especificada'}</Text>
-                      <Text fontSize="sm"><strong>Sexo:</strong> {selectedNotification.patientInfo?.sex || 'No especificado'}</Text>
-                      <Text fontSize="sm"><strong>Emergencia:</strong> {selectedNotification.patientInfo?.type || 'No especificada'}</Text>
-                      {selectedNotification.patientInfo?.timestamp && (
-                        <Text fontSize="xs" color="gray.600">
-                          Reportado: {selectedNotification.patientInfo.timestamp}
-                        </Text>
-                      )}
-                    </VStack>
-                  </Box>
+								{/* Alerta Superior */}
+								<Alert status="info" borderRadius="md">
+									<AlertIcon />
+									<Box>
+										<AlertTitle>¡Ambulancia en Camino!</AlertTitle>
+										<AlertDescription>
+											{selectedNotification.ambulanceId} - {selectedNotification.ambulanceInfo?.placa || 'N/A'}
+										</AlertDescription>
+									</Box>
+								</Alert>
 
-                  <Box flex={1}>
-                    <Text fontWeight="bold" mb={2}>Información del Traslado:</Text>
-                    <VStack align="start" spacing={1}>
-                      <Text fontSize="sm"><strong>ETA:</strong> {selectedNotification.eta || 'Calculando...'}</Text>
-                      <Text fontSize="sm"><strong>Distancia:</strong> {selectedNotification.distance || 'Calculando...'}</Text>
-                      <Text fontSize="sm"><strong>Ambulancia:</strong> {selectedNotification.ambulanceInfo?.placa || 'N/A'}</Text>
-                      <Text fontSize="sm"><strong>Tipo:</strong> {selectedNotification.ambulanceInfo?.tipo || 'N/A'}</Text>
-                    </VStack>
-                  </Box>
-                </HStack>
+								{/* Columnas de Información */}
+								<HStack spacing={4} align="start">
+									<Box flex={1}>
+										<Text fontWeight="bold" mb={2}>Información del Paciente:</Text>
+										<VStack align="start" spacing={1}>
+											<Text fontSize="sm"><strong>Edad:</strong> {selectedNotification.patientInfo?.age || 'No especificada'}</Text>
+											<Text fontSize="sm"><strong>Sexo:</strong> {selectedNotification.patientInfo?.sex || 'No especificado'}</Text>
+											<Text fontSize="sm"><strong>Emergencia:</strong> {selectedNotification.patientInfo?.condition || selectedNotification.patientInfo?.type || 'No especificada'}</Text>
+											{selectedNotification.patientInfo?.timestamp && (
+												<Text fontSize="xs" color="gray.600">
+													Reportado: {selectedNotification.patientInfo.timestamp}
+												</Text>
+											)}
+										</VStack>
+									</Box>
 
-                <Box bg="blue.50" p={3} borderRadius="md" borderLeft="4px" borderColor="blue.500">
-                  <Text fontSize="sm" fontWeight="bold" color="blue.700">
-                    Tiempo estimado de llegada:
-                  </Text>
-                  <Text fontSize="lg" fontWeight="bold" color="blue.800">
-                    {selectedNotification.eta || 'Calculando...'} minutos
-                  </Text>
-                  <Text fontSize="sm" color="blue.600">
-                    Distancia: {selectedNotification.distance || 'Calculando...'} km
-                  </Text>
-                  <Button 
-                    size="sm" 
-                    colorScheme="blue" 
-                    mt={2}
-                    onClick={() => {
-                      if (selectedNotification.routeGeometry) {
-                        const bounds = new mapboxgl.LngLatBounds();
-                        selectedNotification.routeGeometry.forEach(coord => {
-                          bounds.extend([coord[0], coord[1]]);
-                        });
-                        if (hospitalInfo) {
-                          bounds.extend([hospitalInfo.lng, hospitalInfo.lat]);
-                        }
-                        map.current.fitBounds(bounds, { padding: 80, duration: 1000 });
-                      }
-                    }}
-                  >
-                    🗺️ Ver Ruta en el Mapa
-                  </Button>
-                </Box>
-              </VStack>
-            )}
-          </ModalBody>
+									<Box flex={1}>
+										<Text fontWeight="bold" mb={2}>Información del Traslado:</Text>
+										<VStack align="start" spacing={1}>
+											<Text fontSize="sm"><strong>ETA:</strong> {selectedNotification.eta || 'Calculando...'}</Text>
+											<Text fontSize="sm"><strong>Distancia:</strong> {selectedNotification.distance || 'Calculando...'}</Text>
+											<Text fontSize="sm"><strong>Ambulancia:</strong> {selectedNotification.ambulanceInfo?.placa || 'N/A'}</Text>
+											<Text fontSize="sm"><strong>Tipo:</strong> {selectedNotification.ambulanceInfo?.tipo || 'UVI'}</Text>
+										</VStack>
+									</Box>
+								</HStack>
+
+								{/* Caja de Acciones (Ruta + VIDEO) */}
+								<Box bg="blue.50" p={3} borderRadius="md" borderLeft="4px" borderColor="blue.500">
+									<Text fontSize="sm" fontWeight="bold" color="blue.700">
+										Tiempo estimado de llegada:
+									</Text>
+									<Text fontSize="lg" fontWeight="bold" color="blue.800">
+										{selectedNotification.eta || 'Calculando...'} minutos
+									</Text>
+									<Text fontSize="sm" color="blue.600">
+										Distancia: {selectedNotification.distance || 'Calculando...'} km
+									</Text>
+
+									{/* Botones de Acción */}
+									<HStack mt={3} spacing={3}>
+										{/* 1. Botón Original de Ruta */}
+										<Button
+											size="sm"
+											colorScheme="blue"
+											leftIcon={<span>🗺️</span>}
+											onClick={() => {
+												if (selectedNotification.routeGeometry) {
+													const bounds = new mapboxgl.LngLatBounds();
+													selectedNotification.routeGeometry.forEach(coord => {
+														bounds.extend([coord[0], coord[1]]);
+													});
+													if (hospitalInfo) {
+														bounds.extend([hospitalInfo.lng, hospitalInfo.lat]);
+													}
+													map.current.fitBounds(bounds, { padding: 80, duration: 1000 });
+												}
+											}}
+										>
+											Ver Ruta
+										</Button>
+
+										{/* 2. 💉 TU BOTÓN DE VIDEOLLAMADA */}
+										{selectedNotification?.callId && (
+											<Button
+												size="sm"
+												colorScheme="red"
+												variant="solid"
+												className="animate-pulse" // Efecto de parpadeo (si tienes Tailwind)
+												leftIcon={<span>🎥</span>}
+												onClick={() => window.open(`/videocall?room=${selectedNotification.callId}`, '_blank')}
+											>
+												ENTRAR A VIDEOLLAMADA
+											</Button>
+										)}
+									</HStack>
+								</Box>
+
+							</VStack>
+						)}
+					</ModalBody>
           <ModalFooter>
             <Button colorScheme="red" variant="outline" mr={3} onClick={() => rejectPatient(selectedNotification)}>
               Rechazar Paciente
@@ -1476,7 +1504,7 @@ const asignarDoctor = () => {
             </Button>
           </ModalFooter>
         </ModalContent>
-      </Modal> 
+      </Modal>
       {/*  End notification Modal */}
       {/* New Notification Modal (JSON)  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$*/}
       {/* ================================================================= */}
@@ -1490,9 +1518,9 @@ const asignarDoctor = () => {
             <HStack>
               <Text>📋 Reporte Prehospitalario</Text>
               {selectedReport?.codigo_prioridad_color && (
-                <Badge 
-                  bg={selectedReport.codigo_prioridad_color} 
-                  color="white" 
+                <Badge
+                  bg={selectedReport.codigo_prioridad_color}
+                  color="white"
                   px={3} py={1} borderRadius="full">
                   TRIAGE
                 </Badge>
@@ -1502,14 +1530,14 @@ const asignarDoctor = () => {
               🚑 {selectedReport?.id_ambulancia || 'S/N'}
             </Badge>
           </ModalHeader>
-          
+
           <ModalBody py={4} bg="gray.50">
             {/* CORRECCIÓN: El ref debe envolver AL CONTENIDO REAL */}
-            <div ref={reportRef} style={{ padding: '20px', background: 'white', minHeight: '100%' }}> 
-            
+            <div ref={reportRef} style={{ padding: '20px', background: 'white', minHeight: '100%' }}>
+
               {selectedReport && (
                 <VStack spacing={5} align="stretch">
-                  
+
                   {/* SECCIÓN 1: DATOS DEL PACIENTE */}
                   <Card variant="outline" bg="white">
                     <CardBody>
@@ -1580,7 +1608,7 @@ const asignarDoctor = () => {
                            <Text fontSize="xs" color="gray.500">Motivo de Urgencia</Text>
                            <Text fontWeight="medium">{selectedReport.paciente?.motivo_urgencia}</Text>
                          </Box>
-                         
+
                          <SimpleGrid columns={2} spacing={4} width="100%">
                             <Box>
                               <Text fontSize="xs" color="gray.500">Tipo Accidente</Text>
@@ -1647,11 +1675,11 @@ const asignarDoctor = () => {
             </div>
           </ModalBody>
           <ModalFooter bg="gray.100" flexDirection="column" gap={3}>
-            
+
             {/* --- NUEVO SELECTOR DE DOCTORES --- */}
             {/* <Box width="100%">
                 <Text fontSize="xs" fontWeight="bold" color="gray.500" mb={1}>ASIGNAR A MÉDICO DE GUARDIA:</Text>
-                <Select 
+                <Select
                 // ...
                 value={doctorSeleccionado}
                 onChange={(e) => setDoctorSeleccionado(e.target.value)}
@@ -1670,7 +1698,7 @@ const asignarDoctor = () => {
                 <Button variant="ghost" mr={3} onClick={onReportModalClose}>
                   Cerrar
                 </Button>
-                
+
                 {/* El botón ahora llama a nuestra nueva función wrapper */}
                 <Button colorScheme="blue" onClick={asignarDoctor}>
                   ✅ Confirmar y Descargar PDF
