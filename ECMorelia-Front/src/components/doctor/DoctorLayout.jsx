@@ -21,7 +21,7 @@ function DoctorLayoutContent() {
 	// ---------------------------------------------------------
 	useEffect(() => {
 		// Conectar al puerto 8081 (donde está el servidor de alertas)
-		ws.current = new WebSocket('ws://localhost:8081');
+		ws.current = new WebSocket('wss://emergencity.ddnsking.com/socket');
 
 		ws.current.onopen = () => {
 			console.log("👨‍⚕️ Médico conectado al sistema de urgencias");

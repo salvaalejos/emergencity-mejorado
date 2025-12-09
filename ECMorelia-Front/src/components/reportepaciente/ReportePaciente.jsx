@@ -88,11 +88,14 @@ const ReportePaciente = () => {
     hora_intervencion: '',
   });
 
+// ✅ Usar la variable de entorno para que funcione en Prod y Local
+const API_URL = import.meta.env.VITE_API || 'http://localhost:3000/api';
+
   useEffect(() => {
     const cargarHospitales = async () => {
       try {
         // Asumiendo que crearás este endpoint en tu backend (GET /api/hospital)
-        const response = await fetch('http://localhost:3000/api/hospital');
+        const response = await fetch(`${API_URL}/hospital`);
         if (response.ok) {
           const data = await response.json();
           // Asumimos que data es un array: [{ id: 1, nombre: 'Hospital Civil' }, ...]
@@ -114,7 +117,7 @@ const ReportePaciente = () => {
   }, [theme]);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8081/ws');
+    const ws = new WebSocket('wss://emergencity.ddnsking.com/socket');
 
     ws.onopen = () => {
       console.log('✅ ReportePaciente conectado al servidor de WebSockets');

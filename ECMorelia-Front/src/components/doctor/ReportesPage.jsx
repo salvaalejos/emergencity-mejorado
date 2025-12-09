@@ -78,7 +78,7 @@ const ReportesPage = () => {
 	// 2. CONEXIÓN WEBSOCKET (TIEMPO REAL - CORREGIDA)
 	useEffect(() => {
 		// ✅ CORRECCIÓN: Puerto 8081 (El nuestro)
-		const ws = new WebSocket('ws://localhost:8081');
+		const ws = new WebSocket('wss://emergencity.ddnsking.com/socket');
 
 		ws.onopen = () => {
 			console.log(`✅ [DOCTOR] Conectado al sistema de urgencias.`);

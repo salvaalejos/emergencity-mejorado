@@ -103,7 +103,7 @@ export default function MapaHospitalOptimizado() {
       setIsConnecting(true);
       connectionAttempts.current += 1;
 
-      ws.current = new WebSocket('ws://localhost:8081/ws');
+      ws.current = new WebSocket('wss://emergencity.ddnsking.com/socket');
 
       ws.current.onopen = () => {
         if (!isMounted.current) return;

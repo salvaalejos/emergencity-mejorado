@@ -93,7 +93,7 @@ export default function MapaOperadorOptimizado() {
       setIsConnecting(true);
       connectionAttempts.current += 1;
 
-      ws.current = new WebSocket('ws://localhost:3002/ws');
+      ws.current = new WebSocket('wss://emergencity.ddnsking.com/socket');
 
       ws.current.onopen = () => {
         console.log('✅ Operador conectado al servidor WebSocket');
